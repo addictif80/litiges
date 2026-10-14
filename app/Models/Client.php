@@ -27,8 +27,12 @@ class Client extends Model
         $params = [];
 
         if ($q !== '') {
-            $where = '(c.raison_sociale LIKE :q OR c.siren LIKE :q OR c.siret LIKE :q OR c.ville LIKE :q)';
-            $params['q'] = '%' . $q . '%';
+            $where = '(c.raison_sociale LIKE :q1 OR c.siren LIKE :q2 OR c.siret LIKE :q3 OR c.ville LIKE :q4)';
+            $like  = '%' . $q . '%';
+            $params['q1'] = $like;
+            $params['q2'] = $like;
+            $params['q3'] = $like;
+            $params['q4'] = $like;
         }
 
         $total = (int) Database::value("SELECT COUNT(*) FROM clients c WHERE {$where}", $params, 0);

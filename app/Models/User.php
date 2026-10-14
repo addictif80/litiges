@@ -19,8 +19,8 @@ class User extends Model
     public function findByLogin(string $login): ?array
     {
         return Database::fetch(
-            'SELECT * FROM users WHERE username = :l OR email = :l LIMIT 1',
-            ['l' => $login]
+            'SELECT * FROM users WHERE username = :login OR email = :email LIMIT 1',
+            ['login' => $login, 'email' => $login]
         );
     }
 

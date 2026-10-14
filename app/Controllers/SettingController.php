@@ -78,8 +78,8 @@ class SettingController extends Controller
         }
 
         $utilise = (int) Database::value(
-            'SELECT COUNT(*) FROM litiges WHERE statut_id = :id OR finalite_id = :id',
-            ['id' => (int) $id],
+            'SELECT COUNT(*) FROM litiges WHERE statut_id = :statut_id OR finalite_id = :finalite_id',
+            ['statut_id' => (int) $id, 'finalite_id' => (int) $id],
             0
         );
         if ($utilise > 0) {

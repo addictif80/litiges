@@ -100,8 +100,13 @@ class Litige extends Model
         $params = [];
 
         if (!empty($f['q'])) {
-            $conds[] = '(l.reference LIKE :q OR l.objet LIKE :q OR c.raison_sociale LIKE :q OR l.numero_facture LIKE :q OR l.reference_externe LIKE :q)';
-            $params['q'] = '%' . $f['q'] . '%';
+            $conds[] = '(l.reference LIKE :q1 OR l.objet LIKE :q2 OR c.raison_sociale LIKE :q3 OR l.numero_facture LIKE :q4 OR l.reference_externe LIKE :q5)';
+            $like = '%' . $f['q'] . '%';
+            $params['q1'] = $like;
+            $params['q2'] = $like;
+            $params['q3'] = $like;
+            $params['q4'] = $like;
+            $params['q5'] = $like;
         }
         if (!empty($f['client_id'])) {
             $conds[] = 'l.client_id = :client_id';

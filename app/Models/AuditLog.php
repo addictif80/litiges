@@ -19,8 +19,13 @@ class AuditLog extends Model
         $params = [];
 
         if (!empty($f['q'])) {
-            $conds[] = '(username LIKE :q OR action LIKE :q OR entite LIKE :q OR ip LIKE :q OR details LIKE :q)';
-            $params['q'] = '%' . $f['q'] . '%';
+            $conds[] = '(username LIKE :q1 OR action LIKE :q2 OR entite LIKE :q3 OR ip LIKE :q4 OR details LIKE :q5)';
+            $like = '%' . $f['q'] . '%';
+            $params['q1'] = $like;
+            $params['q2'] = $like;
+            $params['q3'] = $like;
+            $params['q4'] = $like;
+            $params['q5'] = $like;
         }
         if (!empty($f['action'])) {
             $conds[] = 'action = :action';
