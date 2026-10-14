@@ -13,6 +13,12 @@ $icones = [
     'relance_due'       => '🔔',
     'promesse_depassee' => '⚠',
     'echeance_proche'   => '⏰',
+    'client_cree'       => '🏢',
+    'litige_cree'       => '📁',
+    'litige_modif'      => '✎',
+    'litige_resolu'     => '✅',
+    'litige_note'       => '📝',
+    'chat_message'      => '💬',
 ];
 ?>
 <div class="flex mb-2">
@@ -37,7 +43,13 @@ $icones = [
             <div style="display:flex;gap:13px;align-items:flex-start;padding:14px 18px;border-bottom:1px solid #eef2f7;<?= $nonLue ? 'background:#f7fbff' : '' ?>">
                 <div style="font-size:20px;line-height:1.2"><?= $icones[$n['type']] ?? '🔔' ?></div>
                 <div style="flex:1;min-width:0">
-                    <div class="<?= $nonLue ? 'gras' : '' ?>"><?= e($n['message']) ?></div>
+                    <div class="<?= $nonLue ? 'gras' : '' ?>">
+                        <?php if (!empty($n['lien'])): ?>
+                            <a href="<?= e($n['lien']) ?>"><?= e($n['message']) ?></a>
+                        <?php else: ?>
+                            <?= e($n['message']) ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="petit texte-doux">
                         <?= datetime_fr($n['created_at']) ?>
                         <?php if (!empty($n['reference'])): ?>

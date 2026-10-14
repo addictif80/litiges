@@ -138,6 +138,10 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
             </table>
         </div>
     </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>✉️ Courriel (SMTP)</h3></div>
+        <div class="card-corps">
             <div class="ligne-champs">
                 <div class="form-groupe">
                     <label for="smtp_host">Serveur SMTP</label>

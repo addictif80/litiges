@@ -14,6 +14,7 @@ use App\Models\Document;
 use App\Models\Litige;
 use App\Services\Api\OneMinAiService;
 use App\Services\CompanyLookupService;
+use App\Services\NotificationService;
 
 class ClientController extends Controller
 {
@@ -54,9 +55,23 @@ class ClientController extends Controller
 
     public function create(): void
     {
+        // Pre-remplissage possible depuis l'inspection d'entreprise (?siren=...&raison_sociale=...).
+        $client = ['pays' => 'France', 'actif' => 1];
+        $champs = [
+            'raison_sociale', 'forme_juridique', 'siren', 'siret', 'tva_intra', 'ape_naf',
+            'libelle_ape', 'adresse', 'complement_adresse', 'code_postal', 'ville', 'effectif',
+            'date_creation', 'capital', 'chiffre_affaires', 'resultat_net', 'statut_entreprise',
+        ];
+        foreach ($champs as $champ) {
+            $valeur = $this->input($champ, null);
+            if ($valeur !== null && $valeur !== '') {
+                $client[$champ] = (string) $valeur;
+            }
+        }
+
         $this->view('clients/form', [
             'titre'  => 'Nouveau client',
-            'client' => ['pays' => 'France', 'actif' => 1],
+            'client' => $client,
             'mode'   => 'creation',
         ]);
     }
@@ -79,6 +94,12 @@ class ClientController extends Controller
         $id = $clients->create($data);
 
         Audit::log('client_creation', 'client', $id, ['raison_sociale' => $data['raison_sociale']]);
+
+        $client = $clients->find((int) $id);
+        if ($client) {
+            (new NotificationService())->clientCree($client, (int) Auth::id());
+        }
+
         flash('success', 'Client cree.');
         $this->redirect('/clients/' . $id);
     }

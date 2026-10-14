@@ -8,7 +8,7 @@ use App\Core\Database;
 class Notification extends Model
 {
     protected string $table = 'notifications';
-    protected array $fillable = ['user_id', 'litige_id', 'type', 'message', 'lu'];
+    protected array $fillable = ['user_id', 'litige_id', 'type', 'message', 'lien', 'lu'];
 
     public function forUser(int $userId, bool $nonLuesSeules = false, int $limit = 50): array
     {

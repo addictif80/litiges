@@ -108,7 +108,7 @@ class SettingController extends Controller
             'company_api_provider', 'recuperation_auto_active', 'verrouillage_tentatives',
             'verrouillage_minutes', 'max_upload_mo',
             'smtp_host', 'smtp_port', 'smtp_user', 'smtp_secure', 'smtp_from', 'smtp_from_nom',
-            'oneminai_enabled', 'oneminai_api_key', 'oneminai_model',
+            'oneminai_enabled', 'oneminai_model',
             'perm_gestionnaire_litiges', 'perm_gestionnaire_clients', 'perm_gestionnaire_relances', 'perm_gestionnaire_chat',
             'perm_consultant_litiges',   'perm_consultant_clients',   'perm_consultant_relances',   'perm_consultant_chat',
             'perm_lecteur_litiges',      'perm_lecteur_clients',      'perm_lecteur_relances',      'perm_lecteur_chat',

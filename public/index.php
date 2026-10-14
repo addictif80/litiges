@@ -24,6 +24,7 @@ use App\Controllers\CompanyController;
 use App\Controllers\ContactController;
 use App\Controllers\DashboardController;
 use App\Controllers\DocumentController;
+use App\Controllers\InspectionController;
 use App\Controllers\LitigeController;
 use App\Controllers\NoteController;
 use App\Controllers\NotificationController;
@@ -139,6 +140,10 @@ $router->post('/clients/{id}/contacts/{contactId}/supprimer', [ContactController
 // API entreprises (JSON)
 $router->get('/api/entreprises', [CompanyController::class, 'search'], 'auth');
 $router->get('/api/entreprises/{identifiant}', [CompanyController::class, 'detail'], 'auth');
+
+// Inspection d'une entreprise sans creation de client (HTML)
+$router->get('/entreprise', [InspectionController::class, 'index'], 'module:clients');
+$router->get('/entreprise/{identifiant}', [InspectionController::class, 'show'], 'module:clients');
 
 // Utilisateurs (admin)
 $router->get('/utilisateurs', [UserController::class, 'index'], 'admin');

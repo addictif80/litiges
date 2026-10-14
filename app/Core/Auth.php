@@ -151,7 +151,16 @@ class Auth
     /** L'utilisateur connecte a-t-il acces a ce module ? */
     public static function peut(string $module): bool
     {
-        $role = self::role();
+        return self::peutPourRole(self::role(), $module);
+    }
+
+    /**
+     * Le role donne a-t-il acces a ce module ? Utilise notamment pour cibler
+     * les destinataires des notifications (un utilisateur ne recoit une
+     * notification de module que s'il peut acceder a ce module).
+     */
+    public static function peutPourRole(string $role, string $module): bool
+    {
         if ($role === 'admin') {
             return true;
         }

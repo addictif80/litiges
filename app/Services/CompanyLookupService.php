@@ -152,6 +152,175 @@ class CompanyLookupService
     }
 
     /**
+     * Dossier complet d'une entreprise, utilisable SANS creer de client :
+     * identite enrichie (libelles), historique financier, procedures
+     * collectives actuelles et historiques (BODACC), dirigeants et autres
+     * entreprises liees, et score de solvabilite.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function dossier(string $identifiant, ?float $encours = null): ?array
+    {
+        $donnees = $this->lookup($identifiant, $encours);
+        if ($donnees === null) {
+            return null;
+        }
+
+        $siren = (string) ($donnees['siren'] ?? '');
+
+        // Procedures collectives : actuelles et historiques (BODACC).
+        $annonces = $siren !== '' ? $this->bodacc->proceduresEtRadiations($siren) : [];
+        $donnees['procedures']          = $annonces;
+        $donnees['procedures_par_annee'] = BodaccApi::parAnnee($annonces);
+        $donnees['procedure_en_cours']   = $this->procedureEnCours($annonces);
+        if ($donnees['procedure_en_cours'] !== null && empty($donnees['procedure_collective'])) {
+            $donnees['procedure_collective'] = $donnees['procedure_en_cours']['libelle'] ?? 'Procedure collective en cours';
+        }
+
+        // Dirigeants et autres entreprises rattachees a chacun.
+        $donnees['dirigeants_detail'] = $this->dirigeantsEtEntreprises($donnees);
+
+        // Score de solvabilite detaille.
+        $donnees['solvabilite'] = $this->solvabilite->calculer($donnees, $encours);
+
+        return $donnees;
+    }
+
+    /**
+     * Indique si une procedure collective est en cours d'apres la derniere
+     * annonce BODACC (hors cloture / radiation / fin de procedure).
+     *
+     * @param array<int,array<string,mixed>> $annonces
+     * @return array<string,mixed>|null
+     */
+    private function procedureEnCours(array $annonces): ?array
+    {
+        foreach ($annonces as $a) {
+            $type = mb_strtolower((string) ($a['type'] ?? ''));
+            if ($type === '' || str_contains($type, 'cloture') || str_contains($type, 'fin de')
+                || str_contains($type, 'radiation')) {
+                continue;
+            }
+            return $a;
+        }
+        return null;
+    }
+
+    /**
+     * Pour chaque dirigeant, recherche les autres entreprises (SIREN distinct)
+     * auxquelles il est rattache, via l'API Recherche d'entreprises.
+     *
+     * @param array<string,mixed> $donnees
+     * @return array<int,array<string,mixed>>
+     */
+    public function dirigeantsEtEntreprises(array $donnees): array
+    {
+        $dirigeants = $donnees['dirigeants'] ?? [];
+        if (!is_array($dirigeants) || $dirigeants === []) {
+            return [];
+        }
+
+        $siren = (string) ($donnees['siren'] ?? '');
+        $out   = [];
+        foreach ($dirigeants as $d) {
+            if (!is_array($d)) {
+                continue;
+            }
+            $entree = $d;
+            $entree['entreprises'] = $this->entreprisesDuDirigeant($d, $siren);
+            $out[] = $entree;
+        }
+        return $out;
+    }
+
+    /**
+     * Autres entreprises liees a un dirigeant (personne physique).
+     *
+     * @param array<string,mixed> $dirigeant
+     * @return array<int,array<string,mixed>>
+     */
+    private function entreprisesDuDirigeant(array $dirigeant, string $sirenExclu): array
+    {
+        $nom     = trim((string) ($dirigeant['nom'] ?? ''));
+        $prenoms = trim((string) ($dirigeant['prenoms'] ?? ''));
+        // Dirigeant personne morale : on ne cherche pas par nom de famille.
+        if ($nom === '' || (($dirigeant['type'] ?? '') === 'personne morale' && $prenoms === '')) {
+            return [];
+        }
+
+        $cible = self::normaliserNom($prenoms . ' ' . $nom);
+        if ($cible === '') {
+            return [];
+        }
+
+        $resultats = $this->etat->search(trim($prenoms . ' ' . $nom), 25);
+        $out = [];
+        foreach ($resultats as $r) {
+            $siren = (string) ($r['siren'] ?? '');
+            if ($siren === '' || $siren === $sirenExclu) {
+                continue;
+            }
+            foreach (($r['dirigeants'] ?? []) as $d) {
+                if (!is_array($d)) {
+                    continue;
+                }
+                $nomComplet = self::normaliserNom(((string) ($d['prenoms'] ?? '')) . ' ' . ((string) ($d['nom'] ?? '')));
+                if ($nomComplet !== '' && $nomComplet === $cible) {
+                    $out[$siren] = [
+                        'siren'           => $siren,
+                        'raison_sociale'  => $r['raison_sociale'] ?? '',
+                        'ville'           => $r['ville'] ?? '',
+                        'statut'          => $r['statut_entreprise'] ?? '',
+                        'forme_juridique' => $r['forme_juridique'] ?? null,
+                        'libelle_ape'     => $r['libelle_ape'] ?? null,
+                        'qualite'         => $d['qualite'] ?? null,
+                    ];
+                    break;
+                }
+            }
+        }
+
+        return array_slice(array_values($out), 0, 15);
+    }
+
+    /** Normalise un nom (minuscules, sans accents, espaces compresses). */
+    private static function normaliserNom(string $nom): string
+    {
+        $nom = mb_strtolower(trim($nom));
+        $nom = strtr($nom, [
+            'à' => 'a', 'â' => 'a', 'ä' => 'a', 'á' => 'a', 'ã' => 'a', 'å' => 'a',
+            'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'î' => 'i', 'ï' => 'i', 'í' => 'i',
+            'ô' => 'o', 'ö' => 'o', 'ó' => 'o', 'õ' => 'o',
+            'ù' => 'u', 'û' => 'u', 'ü' => 'u', 'ú' => 'u',
+            'ç' => 'c', 'ñ' => 'n', 'ÿ' => 'y',
+            'œ' => 'oe', 'æ' => 'ae',
+        ]);
+        $nom = preg_replace('/[^a-z0-9 ]/', ' ', $nom) ?? $nom;
+        $nom = preg_replace('/\s+/', ' ', $nom) ?? $nom;
+        return trim($nom);
+    }
+
+    /**
+     * Extrait et normalise les dirigeants stockes dans raw_data (JSON), pour
+     * l'affichage sur la fiche client sans requete API supplementaire.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function dirigeantsFromRaw(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return [];
+        }
+        $dirigeants = $data['dirigeants'] ?? ($data['entreprise']['dirigeants'] ?? []);
+        return RechercheEntreprisesApi::normaliserDirigeants($dirigeants);
+    }
+
+    /**
      * Recherche par SIRET en ciblant un etablissement precis (API Etat).
      */
     public function lookupEtablissement(string $siret): ?array

@@ -41,7 +41,7 @@
                     </div>
                     <div class="form-groupe">
                         <label>Membres</label>
-                        <div style="max-height:220px;overflow:auto;border:1px solid var(--bordure);border-radius:4px;padding:8px">
+                        <div style="max-height:220px;overflow:auto;border:1px solid var(--bord);border-radius:4px;padding:8px">
                             <?php foreach ($users as $u): ?>
                                 <label class="check"><input type="checkbox" name="membres[]" value="<?= (int) $u['id'] ?>"> <?= e($u['full_name'] ?: $u['username']) ?></label>
                             <?php endforeach; ?>
@@ -78,7 +78,7 @@
                     <?php if (!empty($c['dernier_message'])): ?>
                         <div class="conv-extrait"><?= e(mb_strimwidth($c['dernier_message'], 0, 60, '…')) ?></div>
                     <?php endif; ?>
-                    <div class="conv-meta"><?= $c['dernier_at'] ? date_fr($c['dernier_at'], true) : '' ?>
+                    <div class="conv-meta"><?= $c['dernier_at'] ? datetime_fr($c['dernier_at']) : '' ?>
                         <?php if ((int) ($c['non_lus'] ?? 0) > 0): ?><span class="badge" style="background:var(--bleu-600)"><?= (int) $c['non_lus'] ?></span><?php endif; ?>
                     </div>
                 </a>

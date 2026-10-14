@@ -75,6 +75,13 @@ return [
             'timeout'  => 8,
             'actif'    => false,
         ],
+        // Analyse de confiance via 1min.ai (API compatible OpenAI).
+        // La cle peut aussi etre saisie dans Parametres > Intelligence artificielle.
+        'oneminai' => [
+            'api_key' => '',     // cle API 1min.ai (server-side uniquement)
+            'model'   => 'gpt-4o-mini',
+            'timeout' => 120,
+        ],
     ],
 
     // --- Courriel (SMTP optionnel) ------------------------------------

@@ -6,7 +6,7 @@ namespace App\Controllers;
 use App\Core\Audit;
 use App\Core\Session;
 use App\Models\ClientNote;
-use App\Models\ClientNote;
+use App\Models\Litige;
 use App\Models\LitigeStatut;
 use App\Models\Partage;
 use App\Models\Relance;

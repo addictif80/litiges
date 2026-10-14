@@ -19,6 +19,7 @@ use App\Models\Relance;
 use App\Models\User;
 use App\Services\ExportService;
 use App\Services\CompanyLookupService;
+use App\Services\NotificationService;
 
 class LitigeController extends Controller
 {
@@ -161,6 +162,8 @@ class LitigeController extends Controller
 
         $this->syncClientSolvabilite((int) $data['client_id']);
 
+        (new NotificationService())->litigeCree(['id' => $id, 'reference' => $data['reference']], (int) Auth::id());
+
         flash('success', 'Litige ' . $data['reference'] . ' cree.');
         $this->redirect('/litiges/' . $id);
     }
@@ -215,6 +218,8 @@ class LitigeController extends Controller
         (new LitigeHistorique())->diff((int) $id, (int) Auth::id(), $avant, array_merge($avant, $data));
         Audit::log('litige_modification', 'litige', (int) $id, ['reference' => $avant['reference']]);
 
+        (new NotificationService())->litigeModifie(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id());
+
         flash('success', 'Litige mis a jour.');
         $this->redirect('/litiges/' . $id);
     }
@@ -262,6 +267,13 @@ class LitigeController extends Controller
             $commentaire !== '' ? $commentaire : ('Nouveau statut : ' . $statut['libelle'])
         );
         Audit::log('litige_statut', 'litige', (int) $id, ['statut' => $statut['libelle']]);
+
+        $notif = new NotificationService();
+        if ($cloturant) {
+            $notif->litigeResolu(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id(), (string) $statut['libelle']);
+        } else {
+            $notif->litigeModifie(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id());
+        }
 
         flash('success', 'Statut mis a jour : ' . $statut['libelle'] . '.');
         $this->redirect('/litiges/' . $id);

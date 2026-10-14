@@ -50,6 +50,49 @@ class BodaccApi
     }
 
     /**
+     * Toutes les annonces "procedure collective" et "radiation" publiees pour
+     * un SIREN, de la plus recente a la plus ancienne (actuelles et historiques).
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function proceduresEtRadiations(string $siren, int $limit = 60): array
+    {
+        $procedures = $this->annonces($siren, 'Procédures%', $limit);
+        $radiations = $this->annonces($siren, 'Radiations%', min(30, $limit));
+
+        $toutes = [];
+        foreach (array_merge($procedures, $radiations) as $a) {
+            $cle = (string) ($a['numero'] ?? '') . '|' . (string) ($a['date_parution'] ?? '');
+            $toutes[$cle] = $a;
+        }
+
+        $liste = array_values($toutes);
+        usort($liste, static function (array $a, array $b): int {
+            return strcmp((string) ($b['date_parution'] ?? ''), (string) ($a['date_parution'] ?? ''));
+        });
+
+        return $liste;
+    }
+
+    /**
+     * Regroupe des annonces par annee de parution.
+     *
+     * @param array<int,array<string,mixed>> $annonces
+     * @return array<int,array<int,array<string,mixed>>> annee => annonces
+     */
+    public static function parAnnee(array $annonces): array
+    {
+        $groupes = [];
+        foreach ($annonces as $a) {
+            $date = (string) ($a['date'] ?? $a['date_parution'] ?? '');
+            $annee = (int) substr($date, 0, 4);
+            $groupes[$annee][] = $a;
+        }
+        krsort($groupes);
+        return $groupes;
+    }
+
+    /**
      * Annonces BODACC publiees pour un SIREN.
      *
      * @param string $familleLike Filtre SQL "like" sur familleavis_lib (ex. "Procédures%").

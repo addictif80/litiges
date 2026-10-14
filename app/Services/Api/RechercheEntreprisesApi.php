@@ -5,6 +5,7 @@ namespace App\Services\Api;
 
 use App\Core\Config;
 use App\Services\HttpClient;
+use App\Services\ReferentielService;
 
 /**
  * API publique et gratuite "Recherche d'entreprises" (Etat francais).
@@ -96,14 +97,23 @@ class RechercheEntreprisesApi
 
         $adresse = trim((string) ($siege['adresse'] ?? $siege['geo_adresse'] ?? ''));
 
+        $apeCode  = $item['activite_principale'] ?? ($siege['activite_principale'] ?? null);
+        $apeNaf25 = $item['activite_principale_naf25'] ?? ($siege['activite_principale_naf25'] ?? null);
+        $formeCode = $item['nature_juridique'] ?? null;
+
         return [
             'raison_sociale'     => $item['nom_raison_sociale'] ?? ($item['nom_complet'] ?? ($item['nom_entreprise'] ?? '')),
-            'forme_juridique'    => $item['nature_juridique'] ?? null,
+            'forme_juridique'    => ReferentielService::formeJuridique($formeCode !== null ? (string) $formeCode : null),
+            'forme_juridique_code' => $formeCode,
             'siren'              => $item['siren'] ?? null,
             'siret'              => $siege['siret'] ?? null,
             'tva_intra'          => null,
-            'ape_naf'            => $item['activite_principale'] ?? ($siege['activite_principale'] ?? null),
-            'libelle_ape'        => null,
+            'ape_naf'            => $apeCode,
+            'ape_naf_2025'       => $apeNaf25,
+            'libelle_ape'        => ReferentielService::libelleApe($apeCode !== null ? (string) $apeCode : null)
+                                    ?? ReferentielService::naf2025($apeNaf25 !== null ? (string) $apeNaf25 : null),
+            'section_ape'          => ReferentielService::sectionCode($apeCode !== null ? (string) $apeCode : null),
+            'section_ape_libelle'  => ReferentielService::section($apeCode !== null ? (string) $apeCode : null),
             'adresse'            => $adresse !== '' ? $adresse : null,
             'complement_adresse' => $siege['complement_adresse'] ?? null,
             'code_postal'        => $siege['code_postal'] ?? null,
@@ -115,13 +125,67 @@ class RechercheEntreprisesApi
             'chiffre_affaires'   => $ca,
             'resultat_net'       => $resultat,
             'annee_finances'     => $annee,
+            'finances_historique' => $this->financesHistorique($finances),
             'statut_entreprise'  => $statut,
             'procedure_collective' => $this->procedureCollective($item),
             'score_solvabilite'  => null,
             'source_api'         => 'recherche-entreprises',
             'raw_data'           => json_encode($item, JSON_UNESCAPED_UNICODE),
-            'dirigeants'         => $item['dirigeants'] ?? [],
+            'dirigeants'         => self::normaliserDirigeants($item['dirigeants'] ?? []),
         ];
+    }
+
+    /**
+     * Historique des exercices comptables, du plus recent au plus ancien.
+     * @return array<int,array<string,mixed>>
+     */
+    private function financesHistorique(mixed $finances): array
+    {
+        if (!is_array($finances) || $finances === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($finances as $annee => $f) {
+            if (!is_numeric($annee) || !is_array($f)) {
+                continue;
+            }
+            $out[] = [
+                'annee'        => (int) $annee,
+                'ca'           => $f['ca'] ?? null,
+                'resultat_net' => $f['resultat_net'] ?? null,
+            ];
+        }
+        usort($out, static fn (array $a, array $b): int => $b['annee'] <=> $a['annee']);
+        return $out;
+    }
+
+    /**
+     * Normalise la liste des dirigeants (personnes physiques et morales).
+     * @return array<int,array<string,mixed>>
+     */
+    public static function normaliserDirigeants(mixed $dirigeants): array
+    {
+        if (!is_array($dirigeants)) {
+            return [];
+        }
+        $out = [];
+        foreach ($dirigeants as $d) {
+            if (!is_array($d)) {
+                continue;
+            }
+            $type = $d['type_dirigeant'] ?? (isset($d['denomination']) ? 'personne morale' : 'personne physique');
+            $out[] = [
+                'nom'             => $d['nom'] ?? null,
+                'prenoms'         => $d['prenoms'] ?? ($d['prenom'] ?? null),
+                'qualite'         => $d['qualite'] ?? null,
+                'annee_naissance' => $d['annee_de_naissance'] ?? null,
+                'type'            => $type,
+                'denomination'    => $d['denomination'] ?? null,
+                'siren'           => $d['siren'] ?? null,
+                'represente_par'  => $d['represente_par'] ?? null,
+            ];
+        }
+        return $out;
     }
 
     private function procedureCollective(array $item): ?string

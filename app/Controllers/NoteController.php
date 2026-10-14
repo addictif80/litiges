@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Models\Litige;
 use App\Models\LitigeHistorique;
 use App\Models\Note;
+use App\Services\NotificationService;
 
 class NoteController extends Controller
 {
@@ -33,6 +34,8 @@ class NoteController extends Controller
 
         (new LitigeHistorique())->log($id, (int) Auth::id(), 'note', 'Note interne', null, null, mb_substr($contenu, 0, 250));
         Audit::log('note_ajout', 'litige', $id);
+
+        (new NotificationService())->noteLitige($litige, (int) Auth::id());
 
         flash('success', 'Note ajoutee.');
         $this->redirect('/litiges/' . $id . '#notes');

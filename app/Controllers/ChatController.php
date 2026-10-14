@@ -10,6 +10,7 @@ use App\Models\Agence;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\NotificationService;
 
 /**
  * Messagerie interne : discussions 1-a-1, groupes et canaux d'agence.
@@ -30,7 +31,7 @@ class ChatController extends Controller
         $this->view('chat/index', [
             'titre'         => 'Messagerie',
             'conversations' => $conversations,
-            'users'         => (new User())->listActifs(),
+            'users'         => (new User())->withAgence('u.actif = 1'),
             'agences'       => (new Agence())->listActives(),
             'estAdmin'      => Auth::isAdmin(),
         ]);
@@ -50,6 +51,7 @@ class ChatController extends Controller
             'titreChat' => $this->titre($chat, $uid),
             'messages'  => (new ChatMessage())->pourChat((int) $chat['id']),
             'membres'   => $chats->membres((int) $chat['id']),
+            'authUser'  => Auth::user(),
         ]);
     }
 
@@ -137,6 +139,8 @@ class ChatController extends Controller
         Database::run('UPDATE chats SET updated_at = NOW() WHERE id = :id', ['id' => (int) $chat['id']]);
         $chats->marquerLu((int) $chat['id'], $uid);
         Audit::log('chat_message', 'chat', (int) $chat['id']);
+
+        (new NotificationService())->chatMessage($chat, $this->titre($chat, $uid), $uid);
 
         $this->redirect('/chat/' . (int) $chat['id'] . '#bas');
     }

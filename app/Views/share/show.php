@@ -94,6 +94,8 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
                     <?php endif; ?>
                 </dl>
             </div>
+        </div>
+
         <?php if (!empty($clientNotes)): ?>
             <div class="card mt-2 no-print">
                 <div class="card-entete"><h3>Notes sur la fiche client (lecture seule)</h3></div>

@@ -69,6 +69,9 @@ $icones = [
             <a href="<?= url('/clients') ?>" class="<?= is_active_menu('/clients') ?>">
                 <span class="ic"><?= $icones['clients'] ?></span> Clients
             </a>
+            <a href="<?= url('/entreprise') ?>" class="<?= is_active_menu('/entreprise') ?>">
+                <span class="ic">🔎</span> Inspecter une entreprise
+            </a>
             <?php endif; ?>
 
             <?php if (\App\Core\Auth::peut('relances') && $peutEcrire): ?>

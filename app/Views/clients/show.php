@@ -13,6 +13,14 @@ foreach ($litiges as $l) {
     }
 }
 $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $encours);
+
+// Bloc légal réutilisable : forme juridique et APE avec libellés, dirigeants.
+$entreprise = [
+    'forme_juridique' => $client['forme_juridique'] ?? null,
+    'ape_naf'         => $client['ape_naf'] ?? null,
+    'libelle_ape'     => $client['libelle_ape'] ?? null,
+    'dirigeants'      => \App\Services\CompanyLookupService::dirigeantsFromRaw($client['raw_data'] ?? null),
+];
 ?>
 <div class="fil"><a href="<?= url('/clients') ?>">Clients</a> / <?= e($client['raison_sociale']) ?></div>
 
@@ -98,7 +106,7 @@ $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $enco
                             </td>
                             <td class="actions">
                     <?php if ($peutEcrire): ?>
-                        <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/notes/' . (int) $c['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer ce contact ?">
+                        <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/contacts/' . (int) $c['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer ce contact ?">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn-lien rouge">Suppr.</button>
                         </form>
@@ -175,15 +183,20 @@ $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $enco
 
     <div>
         <div class="card">
-            <div class="card-entete"><h3>Informations légales</h3></div>
+            <div class="card-entete">
+                <h3>Informations légales</h3>
+                <?php if (!empty($client['siren'])): ?>
+                    <div class="esp"></div>
+                    <a href="<?= url('/entreprise/' . rawurlencode((string) $client['siren'])) ?>" class="btn-lien">Fiche complète ↗</a>
+                <?php endif; ?>
+            </div>
             <div class="card-corps">
-                <dl class="definition" style="grid-template-columns:120px 1fr">
-                    <dt>Forme juridique</dt><dd><?= e($client['forme_juridique'] ?: '—') ?></dd>
+                <?php $e = $entreprise; include __DIR__ . '/../partials/infos_legales.php'; ?>
+
+                <dl class="definition mt-2" style="grid-template-columns:140px 1fr">
                     <dt>SIREN</dt><dd class="mono"><?= e($client['siren'] ?: '—') ?></dd>
                     <dt>SIRET</dt><dd class="mono petit"><?= e($client['siret'] ?: '—') ?></dd>
                     <dt>TVA intra.</dt><dd><?= e($client['tva_intra'] ?: '—') ?></dd>
-                    <dt>Code APE</dt><dd><?= e($client['ape_naf'] ?: '—') ?></dd>
-                    <dt>Activité</dt><dd><?= e($client['libelle_ape'] ?: '—') ?></dd>
                     <dt>Création</dt><dd><?= date_fr($client['date_creation']) ?></dd>
                     <dt>Capital</dt><dd><?= $client['capital'] !== null ? money($client['capital']) : '—' ?></dd>
                     <dt>Résultat net</dt><dd class="<?= ((float) $client['resultat_net']) < 0 ? 'texte-rouge' : '' ?>"><?= $client['resultat_net'] !== null ? money($client['resultat_net']) : '—' ?></dd>

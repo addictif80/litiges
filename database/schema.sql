@@ -301,6 +301,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     litige_id  INT UNSIGNED DEFAULT NULL,
     type       VARCHAR(40)  NOT NULL,
     message    VARCHAR(255) NOT NULL,
+    lien       VARCHAR(255) DEFAULT NULL,
     lu         TINYINT(1)   NOT NULL DEFAULT 0,
     created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

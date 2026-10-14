@@ -17,6 +17,10 @@ SET NAMES utf8mb4;
 ALTER TABLE users
     MODIFY COLUMN role ENUM('admin','gestionnaire','consultant','lecteur') NOT NULL DEFAULT 'gestionnaire';
 
+-- Portee "litige" pour les partages par lien (MODIFY est idempotent).
+ALTER TABLE partages
+    MODIFY COLUMN scope ENUM('global','agence','client','litige') NOT NULL DEFAULT 'agence';
+
 -- ---------------------------------------------------------------------
 -- 2. Colonnes ajoutees (fichier clients + jeton de partage)
 --    Via une procedure pour rester idempotent (MySQL 8 et MariaDB).
@@ -41,6 +45,9 @@ CALL _litiges_add_col('clients',  'ia_decision',  'VARCHAR(30) DEFAULT NULL AFTE
 CALL _litiges_add_col('clients',  'ia_analyse',   'LONGTEXT DEFAULT NULL AFTER `ia_decision`');
 CALL _litiges_add_col('clients',  'ia_synced_at', 'DATETIME DEFAULT NULL AFTER `ia_analyse`');
 CALL _litiges_add_col('partages', 'token',        'VARCHAR(64) DEFAULT NULL AFTER `code`');
+
+-- Lien cible des notifications (client, litige, message...).
+CALL _litiges_add_col('notifications', 'lien', 'VARCHAR(255) DEFAULT NULL AFTER `message`');
 
 DROP PROCEDURE IF EXISTS _litiges_add_col;
 

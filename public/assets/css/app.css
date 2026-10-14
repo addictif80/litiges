@@ -239,6 +239,8 @@ input.erreur, select.erreur, textarea.erreur { border-color: var(--rouge); }
 .definition dt { color: var(--texte-doux); font-weight: 500; }
 .definition dd { margin: 0; }
 @media (max-width: 640px) { .definition { grid-template-columns: 1fr; } .definition dd { margin-bottom: 8px; } }
+.liste-simple { margin: 8px 0 0; padding-left: 18px; }
+.liste-simple li { margin-bottom: 6px; }
 
 /* ---------- Timeline (relances / historique) ---------- */
 .timeline { position: relative; padding-left: 26px; }
@@ -275,6 +277,21 @@ input.erreur, select.erreur, textarea.erreur { border-color: var(--rouge); }
 .carte-connexion .btn { width: 100%; justify-content: center; margin-top: 8px; }
 .lien-secondaire { text-align: center; margin-top: 16px; font-size: 13.5px; }
 
+/* ---------- Messagerie ---------- */
+.conv {display:block;padding:8px 10px;border-bottom:1px solid var(--bord);color:inherit;text-decoration:none}
+.conv:hover {background:#f8fafb}
+.conv-titre {font-weight:600}
+.conv-extrait {font-size:12px;color:var(--texte-doux);margin-top:1px}
+.conv-meta {font-size:11px;color:var(--texte-doux);margin-top:2px;display:flex;justify-content:space-between;align-items:center}
+.liste-conversations {display:flex;flex-direction:column}
+.chat-fil {display:flex;flex-direction:column;gap:8px;max-height:480px;overflow:auto;padding:8px}
+.message {display:flex;flex-direction:column;max-width:70%;padding:6px 8px;border-radius:8px;background:#f1f5f9}
+.message.mine {align-self:flex-end;background:var(--bleu-100);border:1px solid var(--bleu-600)}
+.message.mine .message-entete {color:var(--bleu-600)}
+.message-entete {font-size:11px;display:flex;justify-content:space-between;color:var(--texte-doux);gap:8px}
+.message-corps {white-space:pre-wrap}
+.message .message-entete strong {color:var(--texte)}
+
 /* ---------- Divers ---------- */
 .pagination { display: flex; gap: 6px; justify-content: center; padding: 14px; flex-wrap: wrap; }
 .pagination a, .pagination span {
@@ -306,6 +323,9 @@ input.erreur, select.erreur, textarea.erreur { border-color: var(--rouge); }
 .inline { display: inline; }
 .flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; }
+.centre { text-align: center; }
+.p-2 { padding: 16px; }
+.bordure-haut { border-top: 1px solid var(--bord); }
 main-bloc { display: block; }
 
 /* Auto-complete entreprise */

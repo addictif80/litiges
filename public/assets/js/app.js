@@ -187,4 +187,70 @@
     }
 
     window.addEventListener('DOMContentLoaded', initRechercheEntreprise);
+
+    // --- Messagerie : rafraichissement automatique (long polling minimal) ---
+    function initChatFlux() {
+        const conteneur = document.getElementById('chat-fil');
+        if (!conteneur) return;
+
+        const urlBase = conteneur.getAttribute('data-url');
+        if (!urlBase) return;
+
+        let dernierId = 0;
+        const messagesDom = conteneur.querySelectorAll('.message[data-id]');
+        messagesDom.forEach(function (m) {
+            const id = parseInt(m.getAttribute('data-id'), 10);
+            if (!isNaN(id) && id > dernierId) {
+                dernierId = id;
+            }
+        });
+
+        const authId = parseInt(conteneur.getAttribute('data-auth') || (document.body.getAttribute('data-auth-id') || '0'), 10);
+
+        function scrollBas() {
+            const bas = document.getElementById('bas');
+            if (bas) {
+                bas.scrollIntoView({ behavior: 'auto' });
+            } else {
+                conteneur.scrollTop = conteneur.scrollHeight;
+            }
+        }
+
+        scrollBas();
+
+        function charger() {
+            const url = urlBase + (urlBase.indexOf('?') >= 0 ? '&' : '?') + 'after=' + encodeURIComponent(dernierId);
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.ok && Array.isArray(data.messages) && data.messages.length) {
+                        data.messages.forEach(function (msg) {
+                            const div = document.createElement('div');
+                            div.className = 'message' + ((msg.user_id === authId) ? ' mine' : '');
+                            div.setAttribute('data-id', msg.id);
+                            div.innerHTML = '<div class="message-entete"><strong>' + escapeHtml(msg.auteur) + '</strong><span>' + escapeHtml(msg.quand) + '</span></div><div class="message-corps">' + escapeHtml(msg.contenu) + '</div>';
+                            conteneur.insertBefore(div, document.getElementById('bas'));
+                            if (msg.id > dernierId) {
+                                dernierId = msg.id;
+                            }
+                        });
+                        scrollBas();
+                    }
+                })
+                .catch(function () { })
+                .finally(function () {
+                    setTimeout(charger, 2500);
+                });
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+            });
+        }
+
+        setTimeout(charger, 2500);
+    }
+
+    window.addEventListener('DOMContentLoaded', initChatFlux);
 })();

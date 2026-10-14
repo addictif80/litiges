@@ -6,6 +6,7 @@ namespace App\Services\Api;
 use App\Core\Config;
 use App\Core\Settings;
 use App\Services\HttpClient;
+use App\Services\ReferentielService;
 
 /**
  * API Pappers v2 (https://www.pappers.fr/api).
@@ -95,7 +96,7 @@ class PappersApi
         $finances = $data['finances'] ?? ($e['finances'] ?? []);
         $annee = null; $ca = null; $resultat = null;
         if (is_array($finances) && $finances !== []) {
-            if (array_is_list($finances)) {
+            if ($this->estListe($finances)) {
                 $dernier = $finances[0] ?? [];
                 $annee    = $dernier['annee'] ?? null;
                 $ca       = $dernier['chiffre_affaires'] ?? null;
@@ -126,14 +127,21 @@ class PappersApi
             $statut = 'Radiee le ' . $e['date_radiation'];
         }
 
+        $apeCode = $e['code_naf'] ?? null;
+
         return [
             'raison_sociale'     => $e['nom_entreprise'] ?? ($e['nom_complet'] ?? ($e['denomination'] ?? '')),
-            'forme_juridique'    => $e['forme_juridique'] ?? null,
+            'forme_juridique'    => ReferentielService::formeJuridique(
+                isset($e['forme_juridique']) ? (string) $e['forme_juridique'] : null
+            ),
+            'forme_juridique_code' => $e['forme_juridique_code'] ?? null,
             'siren'              => $e['siren'] ?? null,
             'siret'              => $siege['siret'] ?? ($e['siret'] ?? null),
             'tva_intra'          => $e['numero_tva_intracommunautaire'] ?? ($e['tva_intracommunautaire'] ?? null),
-            'ape_naf'            => $e['code_naf'] ?? null,
-            'libelle_ape'        => $e['libelle_code_naf'] ?? null,
+            'ape_naf'            => $apeCode,
+            'libelle_ape'        => $e['libelle_code_naf'] ?? ReferentielService::libelleApe($apeCode !== null ? (string) $apeCode : null),
+            'section_ape'          => ReferentielService::sectionCode($apeCode !== null ? (string) $apeCode : null),
+            'section_ape_libelle'  => ReferentielService::section($apeCode !== null ? (string) $apeCode : null),
             'adresse'            => $siege['adresse'] ?? ($e['adresse'] ?? null),
             'complement_adresse' => $siege['complement_adresse'] ?? null,
             'code_postal'        => $siege['code_postal'] ?? null,
@@ -145,6 +153,7 @@ class PappersApi
             'chiffre_affaires'   => $ca,
             'resultat_net'       => $resultat,
             'annee_finances'     => $annee,
+            'finances_historique' => $this->financesHistorique($finances),
             'statut_entreprise'  => is_string($statut) ? $statut : null,
             'procedure_collective' => $procedure,
             'score_solvabilite'  => isset($data['score_financier']['score'])
@@ -152,7 +161,50 @@ class PappersApi
                 : null,
             'source_api'         => 'pappers',
             'raw_data'           => json_encode($data, JSON_UNESCAPED_UNICODE),
-            'dirigeants'         => $data['dirigeants'] ?? ($e['dirigeants'] ?? []),
+            'dirigeants'         => RechercheEntreprisesApi::normaliserDirigeants($data['dirigeants'] ?? ($e['dirigeants'] ?? [])),
         ];
+    }
+
+    /**
+     * Historique des exercices comptables, du plus recent au plus ancien.
+     * @return array<int,array<string,mixed>>
+     */
+    private function financesHistorique(mixed $finances): array
+    {
+        if (!is_array($finances) || $finances === []) {
+            return [];
+        }
+        $out = [];
+        if ($this->estListe($finances)) {
+            foreach ($finances as $f) {
+                if (!is_array($f) || !isset($f['annee'])) {
+                    continue;
+                }
+                $out[] = [
+                    'annee'        => (int) $f['annee'],
+                    'ca'           => $f['chiffre_affaires'] ?? ($f['ca'] ?? null),
+                    'resultat_net' => $f['resultat'] ?? ($f['resultat_net'] ?? null),
+                ];
+            }
+        } else {
+            foreach ($finances as $annee => $f) {
+                if (!is_numeric($annee) || !is_array($f)) {
+                    continue;
+                }
+                $out[] = [
+                    'annee'        => (int) $annee,
+                    'ca'           => $f['chiffre_affaires'] ?? ($f['ca'] ?? null),
+                    'resultat_net' => $f['resultat'] ?? ($f['resultat_net'] ?? null),
+                ];
+            }
+        }
+        usort($out, static fn (array $a, array $b): int => $b['annee'] <=> $a['annee']);
+        return $out;
+    }
+
+    /** Indique si un tableau est une liste (indices 0..n-1). Compatible PHP 8.0. */
+    private function estListe(array $t): bool
+    {
+        return $t !== [] && array_keys($t) === range(0, count($t) - 1);
     }
 }
