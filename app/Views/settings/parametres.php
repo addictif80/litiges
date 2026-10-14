@@ -1,0 +1,131 @@
+<?php
+/** @var array $settings */
+$s = static fn (string $cle, mixed $defaut = '') => $settings[$cle] ?? $defaut;
+$pappersActif = (string) $s('pappers_api_token') !== '';
+$sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
+?>
+<form method="post" action="<?= url('/parametres') ?>">
+    <?= csrf_field() ?>
+
+    <div class="grille grille-2">
+        <div class="card">
+            <div class="card-entete"><h3>Général</h3></div>
+            <div class="card-corps">
+                <div class="form-groupe">
+                    <label for="app_nom">Nom de l'application</label>
+                    <input type="text" id="app_nom" name="app_nom" value="<?= e($s('app_nom')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="societe_nom">Nom de la société</label>
+                    <input type="text" id="societe_nom" name="societe_nom" value="<?= e($s('societe_nom')) ?>">
+                </div>
+                <div class="ligne-champs">
+                    <div class="form-groupe">
+                        <label for="delai_relance_defaut_jours">Délai de relance par défaut (jours)</label>
+                        <input type="number" id="delai_relance_defaut_jours" name="delai_relance_defaut_jours" min="1" value="<?= e($s('delai_relance_defaut_jours', 15)) ?>">
+                    </div>
+                    <div class="form-groupe">
+                        <label for="seuil_alerte_retard_jours">Seuil d'alerte échéance (jours)</label>
+                        <input type="number" id="seuil_alerte_retard_jours" name="seuil_alerte_retard_jours" min="0" value="<?= e($s('seuil_alerte_retard_jours', 7)) ?>">
+                    </div>
+                    <div class="form-groupe">
+                        <label for="max_upload_mo">Taille max. des pièces jointes (Mo)</label>
+                        <input type="number" id="max_upload_mo" name="max_upload_mo" min="1" value="<?= e($s('max_upload_mo', 10)) ?>">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-entete"><h3>Sécurité</h3></div>
+            <div class="card-corps">
+                <div class="ligne-champs">
+                    <div class="form-groupe">
+                        <label for="verrouillage_tentatives">Tentatives avant verrouillage</label>
+                        <input type="number" id="verrouillage_tentatives" name="verrouillage_tentatives" min="3" max="20" value="<?= e($s('verrouillage_tentatives', 5)) ?>">
+                    </div>
+                    <div class="form-groupe">
+                        <label for="verrouillage_minutes">Durée de verrouillage (minutes)</label>
+                        <input type="number" id="verrouillage_minutes" name="verrouillage_minutes" min="1" value="<?= e($s('verrouillage_minutes', 15)) ?>">
+                    </div>
+                </div>
+                <p class="aide">Les mots de passe sont hashés (bcrypt). Toutes les actions sensibles sont journalisées dans l'audit.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>🔎 Source de données entreprises</h3></div>
+        <div class="card-corps">
+            <div class="ligne-champs">
+                <div class="form-groupe">
+                    <label for="company_api_provider">Fournisseur</label>
+                    <select id="company_api_provider" name="company_api_provider">
+                        <option value="auto" <?= $s('company_api_provider') === 'auto' ? 'selected' : '' ?>>Automatique (Pappers si clé, sinon API de l'État)</option>
+                        <option value="recherche_entreprises" <?= $s('company_api_provider') === 'recherche_entreprises' ? 'selected' : '' ?>>API Recherche d'entreprises (État, gratuite)</option>
+                        <option value="pappers" <?= $s('company_api_provider') === 'pappers' ? 'selected' : '' ?>>Pappers uniquement</option>
+                    </select>
+                </div>
+                <div class="form-groupe">
+                    <label for="pappers_api_token">Clé API Pappers <?= $pappersActif ? '<span class="petit texte-vert">(configurée)</span>' : '' ?></label>
+                    <input type="password" id="pappers_api_token" name="pappers_api_token" placeholder="<?= $pappersActif ? '•••••••• (laisser vide pour conserver)' : 'Collez votre jeton Pappers' ?>" autocomplete="off">
+                    <div class="aide">Clé disponible sur pappers.fr. Sans clé, l'API gratuite de l'État est utilisée (SIREN, adresse, effectif, dirigeants).</div>
+                </div>
+            </div>
+            <label class="check"><input type="checkbox" name="recuperation_auto_active" value="1" <?= (int) $s('recuperation_auto_active', 1) === 1 ? 'checked' : '' ?>> Activer la récupération automatique des données entreprise</label>
+            <div class="mt-2 petit texte-doux">
+                Sources disponibles :
+                État <?= $sources['recherche_entreprises'] ? '<span class="texte-vert">✔</span>' : '<span class="texte-rouge">✘</span>' ?> ·
+                Pappers <?= $sources['pappers'] ? '<span class="texte-vert">✔</span>' : '<span class="texte-rouge">✘ (clé absente)</span>' ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>✉ Envoi de courriels (SMTP, optionnel)</h3></div>
+        <div class="card-corps">
+            <p class="aide mb-2">Utilisé pour les notifications par email et la réinitialisation de mot de passe. Les relances restent historisées même sans SMTP.</p>
+            <div class="ligne-champs">
+                <div class="form-groupe">
+                    <label for="smtp_host">Serveur SMTP</label>
+                    <input type="text" id="smtp_host" name="smtp_host" value="<?= e($s('smtp_host')) ?>" placeholder="smtp.mondomaine.fr">
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_port">Port</label>
+                    <input type="number" id="smtp_port" name="smtp_port" value="<?= e($s('smtp_port', 587)) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_secure">Chiffrement</label>
+                    <select id="smtp_secure" name="smtp_secure">
+                        <option value="tls" <?= $s('smtp_secure') === 'tls' ? 'selected' : '' ?>>TLS (STARTTLS)</option>
+                        <option value="ssl" <?= $s('smtp_secure') === 'ssl' ? 'selected' : '' ?>>SSL</option>
+                        <option value="" <?= $s('smtp_secure') === '' ? 'selected' : '' ?>>Aucun</option>
+                    </select>
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_user">Utilisateur SMTP</label>
+                    <input type="text" id="smtp_user" name="smtp_user" value="<?= e($s('smtp_user')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_pass">Mot de passe SMTP</label>
+                    <input type="password" id="smtp_pass" name="smtp_pass" placeholder="(laisser vide pour conserver)" autocomplete="off">
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_from">Adresse d'expédition</label>
+                    <input type="email" id="smtp_from" name="smtp_from" value="<?= e($s('smtp_from')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="smtp_from_nom">Nom d'expéditeur</label>
+                    <input type="text" id="smtp_from_nom" name="smtp_from_nom" value="<?= e($s('smtp_from_nom')) ?>">
+                </div>
+            </div>
+            <label class="check"><input type="checkbox" name="email_notifications" value="1" <?= (int) $s('email_notifications', 0) === 1 ? 'checked' : '' ?>> Envoyer les notifications de rappel par email</label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-corps flex">
+            <button type="submit" class="btn btn-vert">Enregistrer les paramètres</button>
+        </div>
+    </div>
+</form>

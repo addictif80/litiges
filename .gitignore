@@ -1,0 +1,9 @@
+/config/config.php
+/storage/logs/*.log
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/vendor/
+.phpunit.result.cache
+*.sqlite
+.DS_Store
+Thumbs.db
