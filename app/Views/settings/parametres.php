@@ -86,9 +86,58 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
     </div>
 
     <div class="card">
-        <div class="card-entete"><h3>✉ Envoi de courriels (SMTP, optionnel)</h3></div>
+        <div class="card-entete"><h3>🧠 Intelligence artificielle (1min.ai)</h3></div>
         <div class="card-corps">
-            <p class="aide mb-2">Utilisé pour les notifications par email et la réinitialisation de mot de passe. Les relances restent historisées même sans SMTP.</p>
+            <label class="check mb-2"><input type="checkbox" name="oneminai_enabled" value="1" <?= (int) $s('oneminai_enabled', 0) === 1 ? 'checked' : '' ?>> Activer l'analyse de confiance via 1min.ai</label>
+            <div class="ligne-champs">
+                <div class="form-groupe">
+                    <label for="oneminai_api_key">Clé API 1min.ai</label>
+                    <input type="password" id="oneminai_api_key" name="oneminai_api_key" placeholder="<?= $s('oneminai_api_key') !== '' ? '•••••••• (laisser vide pour conserver)' : 'Collez votre clé API' ?>" autocomplete="off">
+                    <div class="aide">Clé d'API fournie par 1min.ai (compatible OpenAI). Utilisée uniquement pour analyser la confiance d'un client.</div>
+                </div>
+                <div class="form-groupe">
+                    <label for="oneminai_model">Modèle</label>
+                    <input type="text" id="oneminai_model" name="oneminai_model" value="<?= e($s('oneminai_model', 'gpt-4o-mini')) ?>">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>🛡️ Droits d'accès par rôle</h3></div>
+        <div class="card-corps">
+            <p class="aide mb-2">L'administrateur a toujours l'accès à tous les modules. Ces réglages concernent les autres rôles.</p>
+            <table class="tableau tableau-compact">
+                <thead><tr><th>Module</th><th>Gestionnaire</th><th>Consultant</th><th>Lecteur</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Litiges</td>
+                        <td class="centre"><input type="checkbox" name="perm_gestionnaire_litiges" value="1" <?= (int) $s('perm_gestionnaire_litiges', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_consultant_litiges" value="1" <?= (int) $s('perm_consultant_litiges', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_lecteur_litiges" value="1" <?= (int) $s('perm_lecteur_litiges', 1) === 1 ? 'checked' : '' ?>></td>
+                    </tr>
+                    <tr>
+                        <td>Clients</td>
+                        <td class="centre"><input type="checkbox" name="perm_gestionnaire_clients" value="1" <?= (int) $s('perm_gestionnaire_clients', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_consultant_clients" value="1" <?= (int) $s('perm_consultant_clients', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_lecteur_clients" value="1" <?= (int) $s('perm_lecteur_clients', 1) === 1 ? 'checked' : '' ?>></td>
+                    </tr>
+                    <tr>
+                        <td>Relances</td>
+                        <td class="centre"><input type="checkbox" name="perm_gestionnaire_relances" value="1" <?= (int) $s('perm_gestionnaire_relances', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_consultant_relances" value="1" <?= (int) $s('perm_consultant_relances', 0) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_lecteur_relances" value="1" <?= (int) $s('perm_lecteur_relances', 0) === 1 ? 'checked' : '' ?>></td>
+                    </tr>
+                    <tr>
+                        <td>Messagerie</td>
+                        <td class="centre"><input type="checkbox" name="perm_gestionnaire_chat" value="1" <?= (int) $s('perm_gestionnaire_chat', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_consultant_chat" value="1" <?= (int) $s('perm_consultant_chat', 1) === 1 ? 'checked' : '' ?>></td>
+                        <td class="centre"><input type="checkbox" name="perm_lecteur_chat" value="1" <?= (int) $s('perm_lecteur_chat', 1) === 1 ? 'checked' : '' ?>></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
             <div class="ligne-champs">
                 <div class="form-groupe">
                     <label for="smtp_host">Serveur SMTP</label>

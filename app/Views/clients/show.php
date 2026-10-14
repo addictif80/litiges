@@ -3,8 +3,8 @@
  * Fiche client : identite, contacts, litiges, documents.
  * @var array $client
  */
-$peutEcrire = in_array($authUser['role'] ?? '', ['admin', 'gestionnaire'], true);
-$estAdmin = ($authUser['role'] ?? '') === 'admin';
+$peutEcrire = \App\Core\Auth::canWrite();
+$estAdmin = \App\Core\Auth::isAdmin();
 $upload = new \App\Services\UploadService();
 $encours = 0.0;
 foreach ($litiges as $l) {
@@ -31,13 +31,13 @@ $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $enco
     </div>
     <div class="flex">
         <a href="<?= url('/litiges/nouveau?client_id=' . (int) $client['id']) ?>" class="btn">+ Nouveau litige</a>
-        <?php if ($peutEcrire): ?>
-            <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/rafraichir') ?>" data-confirmer="Recharger les données légales depuis l'API ?">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-secondaire" <?= empty($client['siren']) ? 'disabled title="Renseignez un SIREN"' : '' ?>>⟳ Actualiser via API</button>
-            </form>
-            <a href="<?= url('/clients/' . (int) $client['id'] . '/modifier') ?>" class="btn btn-secondaire">✎ Modifier</a>
-        <?php endif; ?>
+                <?php if ($peutEcrire): ?>
+                    <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/rafraichir') ?>" data-confirmer="Recharger les données légales depuis l'API ?">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-secondaire" <?= empty($client['siren']) ? 'disabled title="Renseignez un SIREN"' : '' ?>>⟳ Actualiser via API</button>
+                    </form>
+                    <a href="<?= url('/clients/' . (int) $client['id'] . '/modifier') ?>" class="btn btn-secondaire">✎ Modifier</a>
+                <?php endif; ?>
         <?php if ($estAdmin): ?>
             <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/supprimer') ?>" data-confirmer="Supprimer ce client ?">
                 <?= csrf_field() ?>
@@ -97,12 +97,12 @@ $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $enco
                                 <?php if ($c['email']): ?>✉ <?= e($c['email']) ?><?php endif; ?>
                             </td>
                             <td class="actions">
-                                <?php if ($peutEcrire): ?>
-                                    <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/contacts/' . (int) $c['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer ce contact ?">
-                                        <?= csrf_field() ?>
-                                        <button type="submit" class="btn-lien rouge">Suppr.</button>
-                                    </form>
-                                <?php endif; ?>
+                    <?php if ($peutEcrire): ?>
+                        <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/notes/' . (int) $c['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer ce contact ?">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn-lien rouge">Suppr.</button>
+                        </form>
+                    <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -204,10 +204,74 @@ $solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $enco
 
         <?php if ($client['notes']): ?>
             <div class="card">
-                <div class="card-entete"><h3>Notes internes</h3></div>
+                <div class="card-entete"><h3>Notes internes (champ libre)</h3></div>
                 <div class="card-corps" style="white-space:pre-wrap"><?= e($client['notes']) ?></div>
             </div>
         <?php endif; ?>
+
+        <div class="card" id="notes-client">
+            <div class="card-entete"><h3>Notes sur la fiche client</h3></div>
+            <?php if (\App\Core\Auth::peut('clients') && \App\Core\Auth::canWrite()): ?>
+                <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/notes') ?>" class="card-corps">
+                    <?= csrf_field() ?>
+                    <div class="form-groupe mb-1">
+                        <textarea name="contenu" rows="3" placeholder="Ajouter une note… (visible aux utilisateurs ayant accès à Clients et aux agences via le partage)" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-petit">Ajouter</button>
+                </form>
+            <?php endif; ?>
+            <div class="card-corps">
+                <?php if (empty($clientNotes)): ?>
+                    <div class="texte-doux">Aucune note.</div>
+                <?php else: ?>
+                    <?php foreach ($clientNotes as $n): ?>
+                        <div class="note">
+                            <div class="note-entete">
+                                <strong><?= e($n['user_nom'] ?: $n['username'] ?: 'Inconnu') ?></strong>
+                                <span><?= datetime_fr($n['created_at']) ?></span>
+                                <?php if (\App\Core\Auth::canWrite() && ((int) $n['user_id'] === (int) $authUser['id'] || $estAdmin)): ?>
+                                    <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/notes/' . (int) $n['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer cette note ?">
+                                        <?= csrf_field() ?>
+                                        <button type="submit" class="btn-lien rouge">Supprimer</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                            <div class="note-corps"><?= e($n['contenu']) ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <div class="card" id="ia">
+            <div class="card-entete">
+                <h3>Analyse de confiance IA (1min.ai)</h3>
+                <?php if (\App\Core\Auth::peut('clients') && \App\Core\Auth::canWrite()): ?>
+                    <div class="esp"></div>
+                    <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/analyser-ia') ?>">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-petit">Analyser</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+            <div class="card-corps">
+                <?php if ($client['ia_synced_at']): ?>
+                    <div class="petit texte-doux mb-1">Dernière analyse : <?= datetime_fr($client['ia_synced_at']) ?> — Score IA : <?= (int) $client['ia_score'] ?>/100 — Décision : <?= e($client['ia_decision']) ?></div>
+                <?php endif; ?>
+                <?php if (!$iaAnalyse): ?>
+                    <div class="texte-doux">Aucune analyse enregistrée.</div>
+                <?php else: ?>
+                    <dl class="definition" style="grid-template-columns:130px 1fr">
+                        <dt>Confiance</dt><dd><?= $iaAnalyse['confiance'] ? 'Oui' : 'Non' ?> (<?= (int) $iaAnalyse['score'] ?>/100)</dd>
+                        <dt>Décision</dt><dd><?= e($iaAnalyse['decision']) ?></dd>
+                        <dt>Raison</dt><dd><?= e($iaAnalyse['raison']) ?></dd>
+                        <dt>Risques</dt><dd><?= !empty($iaAnalyse['risques']) ? '<ul class="petit" style="margin:0;padding-left:18px">' . implode('', array_map(fn ($r) => '<li>' . e($r) . '</li>', (array) $iaAnalyse['risques'])) . '</ul>' : '—' ?></dd>
+                        <dt>Recommandations</dt><dd><?= !empty($iaAnalyse['recommandations']) ? '<ul class="petit" style="margin:0;padding-left:18px">' . implode('', array_map(fn ($r) => '<li>' . e($r) . '</li>', (array) $iaAnalyse['recommandations'])) . '</ul>' : '—' ?></dd>
+                        <dt>Analyse</dt><dd style="white-space:pre-wrap"><?= e($iaAnalyse['analyse']) ?></dd>
+                    </dl>
+                <?php endif; ?>
+            </div>
+        </div>
 
         <div class="card">
             <div class="card-entete"><h3>Solvabilité (score interne)</h3></div>

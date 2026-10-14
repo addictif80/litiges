@@ -8,9 +8,11 @@ use App\Core\Auth;
 use App\Core\Settings;
 use App\Core\Validator;
 use App\Models\Client;
+use App\Models\ClientNote;
 use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Litige;
+use App\Services\Api\OneMinAiService;
 use App\Services\CompanyLookupService;
 
 class ClientController extends Controller
@@ -40,11 +42,13 @@ class ClientController extends Controller
         }
 
         $this->view('clients/show', [
-            'titre'     => $client['raison_sociale'],
-            'client'    => $client,
-            'contacts'  => (new Contact())->forClient((int) $id),
-            'litiges'   => (new Client())->litiges((int) $id),
-            'documents' => (new Document())->forClient((int) $id),
+            'titre'      => $client['raison_sociale'],
+            'client'     => $client,
+            'contacts'   => (new Contact())->forClient((int) $id),
+            'litiges'    => (new Client())->litiges((int) $id),
+            'documents'  => (new Document())->forClient((int) $id),
+            'clientNotes' => (new ClientNote())->forClient((int) $id),
+            'iaAnalyse'  => $this->decoderAnalyse($client['ia_analyse'] ?? null),
         ]);
     }
 
@@ -178,6 +182,109 @@ class ClientController extends Controller
 
         flash('success', 'Donnees mises a jour depuis ' . ($donnees['_source'] ?? 'l\'API') . '.');
         $this->redirect('/clients/' . $id);
+    }
+
+    /** Analyse de confiance via l'IA 1min.ai. */
+    public function analyserIa(string $id): void
+    {
+        $clients = new Client();
+        $client  = $clients->find((int) $id);
+        if (!$client) {
+            $this->notFound('Client introuvable.');
+        }
+
+        $service = new OneMinAiService();
+        if (!$service->isEnabled()) {
+            flash('error', "L'analyse IA n'est pas configuree (Parametres > Intelligence artificielle).");
+            $this->redirect('/clients/' . $id);
+        }
+
+        $encours = $clients->encours((int) $id);
+        $resultat = $service->analyserConfiance($client, $encours);
+
+        if (($resultat['decision'] ?? '') === 'erreur') {
+            flash('error', "L'analyse IA a echoue : " . ($resultat['raison'] ?? 'erreur inconnue'));
+            $this->redirect('/clients/' . $id);
+        }
+
+        $analyse = [
+            'confiance'       => (bool) ($resultat['confiance'] ?? false),
+            'score'           => (int) ($resultat['score'] ?? 0),
+            'decision'        => (string) ($resultat['decision'] ?? 'faire_attention'),
+            'raison'          => (string) ($resultat['raison'] ?? ''),
+            'risques'         => $resultat['risques'] ?? [],
+            'recommandations' => $resultat['recommandations'] ?? [],
+            'analyse'         => (string) ($resultat['analyse'] ?? ''),
+            'encours'         => $encours,
+            'date'            => date('Y-m-d H:i:s'),
+        ];
+
+        $clients->update((int) $id, [
+            'ia_score'     => (int) $analyse['score'],
+            'ia_decision'  => mb_substr($analyse['decision'], 0, 30),
+            'ia_analyse'   => json_encode($analyse, JSON_UNESCAPED_UNICODE),
+            'ia_synced_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        Audit::log('client_analyse_ia', 'client', (int) $id, ['decision' => $analyse['decision']]);
+
+        flash('success', "Analyse IA enregistree (decision : " . $analyse['decision'] . ").");
+        $this->redirect('/clients/' . $id . '#ia');
+    }
+
+    /** Ajoute une note sur la fiche client (visible en lecture seule par les agences). */
+    public function storeNote(string $id): void
+    {
+        $client = (new Client())->find((int) $id);
+        if (!$client) {
+            $this->notFound('Client introuvable.');
+        }
+
+        $contenu = trim((string) $this->post('contenu', ''));
+        if ($contenu === '') {
+            flash('error', 'La note ne peut pas etre vide.');
+            $this->redirect('/clients/' . $id . '#notes-client');
+        }
+
+        $noteId = (new ClientNote())->create([
+            'client_id' => (int) $id,
+            'user_id'   => (int) Auth::id(),
+            'contenu'   => mb_substr($contenu, 0, 5000),
+        ]);
+
+        Audit::log('client_note_ajout', 'client', (int) $id, ['note_id' => $noteId]);
+
+        flash('success', 'Note ajoutee.');
+        $this->redirect('/clients/' . $id . '#notes-client');
+    }
+
+    public function destroyNote(string $id, string $noteId): void
+    {
+        $notes = new ClientNote();
+        if (!$notes->belongsTo((int) $noteId, (int) $id)) {
+            $this->notFound('Note introuvable.');
+        }
+
+        $note = $notes->find((int) $noteId);
+        if (!Auth::isAdmin() && (int) $note['user_id'] !== (int) Auth::id()) {
+            $this->forbidden('Vous ne pouvez supprimer que vos propres notes.');
+        }
+
+        $notes->delete((int) $noteId);
+        Audit::log('client_note_suppression', 'client', (int) $id, ['note_id' => (int) $noteId]);
+
+        flash('success', 'Note supprimee.');
+        $this->redirect('/clients/' . $id . '#notes-client');
+    }
+
+    /** @return array<string,mixed>|null */
+    private function decoderAnalyse(?string $json): ?array
+    {
+        if ($json === null || $json === '') {
+            return null;
+        }
+        $data = json_decode($json, true);
+        return is_array($data) ? $data : null;
     }
 
     // ------------------------------------------------------------------

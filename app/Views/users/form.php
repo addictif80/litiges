@@ -32,7 +32,7 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
                 <div class="form-groupe">
                     <label for="role">Rôle <span class="req">*</span></label>
                     <select id="role" name="role" required>
-                        <?php foreach (['admin' => 'Administrateur', 'gestionnaire' => 'Gestionnaire', 'lecteur' => 'Lecteur (consultation)'] as $k => $lib): ?>
+                        <?php foreach (['admin' => 'Administrateur', 'gestionnaire' => 'Gestionnaire', 'consultant' => 'Consultant', 'lecteur' => 'Lecteur (consultation)'] as $k => $lib): ?>
                             <option value="<?= $k ?>" <?= $v('role') === $k ? 'selected' : '' ?>><?= $lib ?></option>
                         <?php endforeach; ?>
                     </select>

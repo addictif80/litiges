@@ -74,6 +74,25 @@ class Router
             return true;
         }
 
+        // Gardes bases sur les permissions par module : "module:xxx" (lecture)
+        // et "modulewrite:xxx" (lecture + ecriture).
+        if (str_starts_with($guard, 'modulewrite:') || str_starts_with($guard, 'module:')) {
+            $ecriture = str_starts_with($guard, 'modulewrite:');
+            $module   = substr($guard, $ecriture ? strlen('modulewrite:') : strlen('module:'));
+
+            if (!Auth::check()) {
+                Session::set('_intended', Request::path());
+                Flash::add('warning', "Merci de vous connecter pour continuer.");
+                redirect('/login');
+                return false;
+            }
+            if (!Auth::peut($module) || ($ecriture && !Auth::canWrite())) {
+                $this->abort(403, "Acces non autorise a ce module.");
+                return false;
+            }
+            return true;
+        }
+
         switch ($guard) {
             case 'guest':
                 if (Auth::check()) {

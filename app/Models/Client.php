@@ -13,7 +13,8 @@ class Client extends Model
         'ape_naf', 'libelle_ape', 'adresse', 'complement_adresse', 'code_postal',
         'ville', 'pays', 'effectif', 'date_creation', 'capital', 'chiffre_affaires',
         'resultat_net', 'annee_finances', 'statut_entreprise', 'procedure_collective',
-        'score_solvabilite', 'source_api', 'raw_data', 'data_synced_at', 'notes',
+        'score_solvabilite', 'ia_score', 'ia_decision', 'ia_analyse', 'ia_synced_at',
+        'source_api', 'raw_data', 'data_synced_at', 'notes',
         'actif', 'created_by',
     ];
 

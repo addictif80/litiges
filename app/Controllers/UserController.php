@@ -170,7 +170,7 @@ class UserController extends Controller
         $validator
             ->required('username')->length('username', 3, 60)
             ->email('email')
-            ->in('role', ['admin', 'gestionnaire', 'lecteur']);
+            ->in('role', ['admin', 'gestionnaire', 'consultant', 'lecteur']);
 
         if ($users->usernameExists($data['username'], $exceptId)) {
             $validator->custom('username', false, 'Cet identifiant est deja utilise.');

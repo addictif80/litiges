@@ -34,6 +34,12 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
         <?php if ($peutEcrire): ?>
             <a href="<?= url('/litiges/' . (int) $litige['id'] . '/modifier') ?>" class="btn btn-secondaire">✎ Modifier</a>
         <?php endif; ?>
+        <?php if ($peutEcrire): ?>
+            <form method="post" action="<?= url('/litiges/' . (int) $litige['id'] . '/partage') ?>">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-secondaire">🔗 Partager (lien public)</button>
+            </form>
+        <?php endif; ?>
         <button type="button" class="btn btn-secondaire" onclick="window.print()">🖨 Imprimer</button>
         <?php if ($estAdmin): ?>
             <form method="post" action="<?= url('/litiges/' . (int) $litige['id'] . '/supprimer') ?>" data-confirmer="Supprimer définitivement ce litige et tout son historique ?">

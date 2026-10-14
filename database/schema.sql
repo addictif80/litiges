@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     email                VARCHAR(190)  DEFAULT NULL,
     password_hash        VARCHAR(255)  NOT NULL,
     full_name            VARCHAR(150)  DEFAULT NULL,
-    role                 ENUM('admin','gestionnaire','lecteur') NOT NULL DEFAULT 'gestionnaire',
+    role                 ENUM('admin','gestionnaire','consultant','lecteur') NOT NULL DEFAULT 'gestionnaire',
     agence_id            INT UNSIGNED  DEFAULT NULL,
     actif                TINYINT(1)    NOT NULL DEFAULT 1,
     must_change_password TINYINT(1)    NOT NULL DEFAULT 0,
@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS clients (
     statut_entreprise  VARCHAR(80)  DEFAULT NULL,
     procedure_collective VARCHAR(190) DEFAULT NULL,
     score_solvabilite  VARCHAR(30)  DEFAULT NULL,
+    ia_score           TINYINT      DEFAULT NULL,
+    ia_decision        VARCHAR(30)  DEFAULT NULL,
+    ia_analyse         LONGTEXT     DEFAULT NULL,
+    ia_synced_at       DATETIME     DEFAULT NULL,
     source_api         VARCHAR(30)  DEFAULT NULL,
     raw_data           LONGTEXT     DEFAULT NULL,
     data_synced_at     DATETIME     DEFAULT NULL,
@@ -312,6 +316,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS partages (
     id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
     code         VARCHAR(32)  NOT NULL,
+    token        VARCHAR(64)  DEFAULT NULL,
     libelle      VARCHAR(150) NOT NULL,
     scope        ENUM('global','agence','client','litige') NOT NULL DEFAULT 'agence',
     scope_id     INT UNSIGNED DEFAULT NULL,
@@ -323,8 +328,70 @@ CREATE TABLE IF NOT EXISTS partages (
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_partages_code (code),
+    UNIQUE KEY uk_partages_token (token),
     KEY idx_partages_scope (scope, scope_id),
     CONSTRAINT fk_partages_user FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Notes sur la fiche client (visibles en lecture seule par les agences)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS client_notes (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    client_id  INT UNSIGNED NOT NULL,
+    user_id    INT UNSIGNED DEFAULT NULL,
+    contenu    TEXT         NOT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_client_notes_client (client_id),
+    CONSTRAINT fk_client_notes_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
+    CONSTRAINT fk_client_notes_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Messagerie interne : conversations (1-a-1, groupe, canal d'agence)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chats (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    type       ENUM('direct','groupe','agence') NOT NULL DEFAULT 'direct',
+    titre      VARCHAR(150) DEFAULT NULL,
+    agence_id  INT UNSIGNED DEFAULT NULL,
+    created_by INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_chats_type (type),
+    KEY idx_chats_agence (agence_id),
+    CONSTRAINT fk_chats_agence FOREIGN KEY (agence_id) REFERENCES agences (id) ON DELETE CASCADE,
+    CONSTRAINT fk_chats_user FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Participants d'une conversation (et suivi de lecture)
+CREATE TABLE IF NOT EXISTS chat_membres (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    chat_id      INT UNSIGNED NOT NULL,
+    user_id      INT UNSIGNED NOT NULL,
+    last_read_at DATETIME     DEFAULT NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_chat_membres (chat_id, user_id),
+    KEY idx_chat_membres_user (user_id),
+    CONSTRAINT fk_chat_membres_chat FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+    CONSTRAINT fk_chat_membres_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Messages d'une conversation
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    chat_id    INT UNSIGNED NOT NULL,
+    user_id    INT UNSIGNED DEFAULT NULL,
+    contenu    TEXT         NOT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_chat_messages_chat (chat_id, id),
+    CONSTRAINT fk_chat_messages_chat FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE,
+    CONSTRAINT fk_chat_messages_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -374,6 +441,9 @@ INSERT INTO settings (cle, valeur) VALUES
     ('recuperation_auto_active',   '1'),
     ('bodacc_actif',               '1'),
     ('score_interne_actif',        '1'),
+    ('oneminai_enabled',           '0'),
+    ('oneminai_api_key',           ''),
+    ('oneminai_model',             'gpt-4o-mini'),
     ('smtp_host',                  ''),
     ('smtp_port',                  '587'),
     ('smtp_user',                  ''),
@@ -385,5 +455,17 @@ INSERT INTO settings (cle, valeur) VALUES
     ('verrouillage_tentatives',    '5'),
     ('verrouillage_minutes',       '15'),
     ('max_upload_mo',              '10'),
+    ('perm_gestionnaire_litiges',  '1'),
+    ('perm_gestionnaire_clients',  '1'),
+    ('perm_gestionnaire_relances', '1'),
+    ('perm_gestionnaire_chat',     '1'),
+    ('perm_consultant_litiges',    '1'),
+    ('perm_consultant_clients',    '1'),
+    ('perm_consultant_relances',   '0'),
+    ('perm_consultant_chat',       '1'),
+    ('perm_lecteur_litiges',       '1'),
+    ('perm_lecteur_clients',       '1'),
+    ('perm_lecteur_relances',      '0'),
+    ('perm_lecteur_chat',          '1'),
     ('install_date',               '')
 ON DUPLICATE KEY UPDATE valeur = valeur;

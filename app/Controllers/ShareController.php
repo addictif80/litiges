@@ -5,13 +5,14 @@ namespace App\Controllers;
 
 use App\Core\Audit;
 use App\Core\Session;
-use App\Models\Litige;
+use App\Models\ClientNote;
+use App\Models\ClientNote;
 use App\Models\LitigeStatut;
 use App\Models\Partage;
 use App\Models\Relance;
 
 /**
- * Acces public en LECTURE SEULE via un code d'acces (pour les agences).
+ * Acces public en LECTURE SEULE via un code d'acces ou un lien public (pour les agences).
  * Aucune authentification utilisateur : la portee est definie par le partage.
  */
 class ShareController extends Controller
@@ -21,7 +22,7 @@ class ShareController extends Controller
     public function form(): void
     {
         $this->view('share/form', [
-            'titre' => 'Consultation en lecture seule',
+            'titre'   => 'Consultation en lecture seule',
             'partage' => $this->partageCourant(),
         ], 'layouts/share');
     }
@@ -41,6 +42,24 @@ class ShareController extends Controller
         Session::regenerate();
         (new Partage())->enregistrerVue((int) $partage['id']);
         Audit::log('partage_acces', 'partage', (int) $partage['id']);
+
+        $this->redirect('/partage/consultation');
+    }
+
+    /** Acces direct via un lien public (/partage/lien/{token}). */
+    public function viaLien(string $token): void
+    {
+        $partage = (new Partage())->findByToken($token);
+        if (!$partage) {
+            Audit::log('partage_echec', 'partage', null, ['token' => substr($token, 0, 8)]);
+            $_SESSION['_errors'] = ['code' => "Lien d'acces invalide ou expire."];
+            $this->redirect('/partage');
+        }
+
+        Session::set(self::SESSION_KEY, (int) $partage['id']);
+        Session::regenerate();
+        (new Partage())->enregistrerVue((int) $partage['id']);
+        Audit::log('partage_acces', 'partage', (int) $partage['id'], ['via' => 'lien']);
 
         $this->redirect('/partage/consultation');
     }
@@ -89,11 +108,12 @@ class ShareController extends Controller
         (new Partage())->enregistrerVue((int) $partage['id']);
 
         $this->view('share/show', [
-            'titre'    => 'Litige ' . $litige['reference'],
-            'partage'  => $partage,
-            'litige'   => $litige,
-            'relances' => (new Relance())->forLitige((int) $id),
-            'types'    => LitigeController::TYPES,
+            'titre'       => 'Litige ' . $litige['reference'],
+            'partage'     => $partage,
+            'litige'      => $litige,
+            'relances'    => (new Relance())->forLitige((int) $id),
+            'clientNotes' => (new ClientNote())->forClient((int) $litige['client_id']),
+            'types'       => LitigeController::TYPES,
         ], 'layouts/share');
     }
 

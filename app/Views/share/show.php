@@ -94,6 +94,21 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
                     <?php endif; ?>
                 </dl>
             </div>
-        </div>
+        <?php if (!empty($clientNotes)): ?>
+            <div class="card mt-2 no-print">
+                <div class="card-entete"><h3>Notes sur la fiche client (lecture seule)</h3></div>
+                <div class="card-corps">
+                    <?php foreach ($clientNotes as $n): ?>
+                        <div class="note">
+                            <div class="note-entete">
+                                <strong><?= e($n['user_nom'] ?: $n['username'] ?: 'Inconnu') ?></strong>
+                                <span><?= datetime_fr($n['created_at']) ?></span>
+                            </div>
+                            <div class="note-corps"><?= e($n['contenu']) ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 </div>

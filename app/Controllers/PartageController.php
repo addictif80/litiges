@@ -7,6 +7,7 @@ use App\Core\Audit;
 use App\Core\Auth;
 use App\Models\Agence;
 use App\Models\Client;
+use App\Models\Litige;
 use App\Models\Partage;
 
 class PartageController extends Controller
@@ -44,6 +45,7 @@ class PartageController extends Controller
         $model  = new Partage();
         $partage = [
             'code'       => $model->generateCode(),
+            'token'      => $model->generateToken(),
             'libelle'    => $libelle,
             'scope'      => $scope,
             'scope_id'   => $scope === 'global' ? null : $scopeId,
@@ -57,6 +59,43 @@ class PartageController extends Controller
 
         flash('success', 'Code d\'acces cree : ' . $partage['code']);
         $this->redirect('/partages');
+    }
+
+    /** Cree (ou reutilise) un lien de partage public pour un litige precis. */
+    public function storeLitige(string $id): void
+    {
+        $litige = (new Litige())->find((int) $id);
+        if (!$litige) {
+            $this->notFound('Litige introuvable.');
+        }
+
+        $model = new Partage();
+
+        // Reutilise un partage actif existant sur ce litige, sinon en cree un.
+        $existant = $model->findBy('scope_id', (int) $id);
+        if ($existant && (string) $existant['scope'] === 'litige' && (int) $existant['actif'] === 1) {
+            $token = (string) ($existant['token'] ?? '');
+            if ($token === '') {
+                $token = $model->generateToken();
+                $model->update((int) $existant['id'], ['token' => $token]);
+            }
+        } else {
+            $token = $model->generateToken();
+            $partageId = $model->create([
+                'code'       => $model->generateCode(),
+                'token'      => $token,
+                'libelle'    => 'Litige ' . $litige['reference'] . ' — partage',
+                'scope'      => 'litige',
+                'scope_id'   => (int) $id,
+                'expires_at' => null,
+                'actif'      => 1,
+                'created_by' => (int) Auth::id(),
+            ]);
+            Audit::log('partage_creation', 'partage', $partageId, ['scope' => 'litige', 'scope_id' => (int) $id]);
+        }
+
+        flash('success', 'Lien de partage (lecture seule) : ' . url('/partage/lien/' . $token));
+        $this->redirect('/litiges/' . (int) $id);
     }
 
     public function toggle(string $id): void

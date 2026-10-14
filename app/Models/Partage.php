@@ -9,7 +9,7 @@ class Partage extends Model
 {
     protected string $table = 'partages';
     protected array $fillable = [
-        'code', 'libelle', 'scope', 'scope_id', 'expires_at', 'actif', 'created_by', 'last_used_at', 'vues',
+        'code', 'token', 'libelle', 'scope', 'scope_id', 'expires_at', 'actif', 'created_by', 'last_used_at', 'vues',
     ];
 
     public const SCOPES = [
@@ -45,6 +45,18 @@ class Partage extends Model
         );
     }
 
+    /** Retrouve un partage a partir de son jeton de lien public. */
+    public function findByToken(string $token): ?array
+    {
+        return Database::fetch(
+            'SELECT * FROM partages
+             WHERE token = :t AND actif = 1
+               AND (expires_at IS NULL OR expires_at > NOW())
+             LIMIT 1',
+            ['t' => $token]
+        );
+    }
+
     public function codeExists(string $code): bool
     {
         return Database::exists('partages', 'code = :c', ['c' => $code]);
@@ -56,6 +68,20 @@ class Partage extends Model
             $code = strtoupper(substr(str_replace(['+', '/', '='], '', base64_encode(random_bytes(9))), 0, 10));
         } while ($this->codeExists($code));
         return $code;
+    }
+
+    public function tokenExists(string $token): bool
+    {
+        return Database::exists('partages', 'token = :t', ['t' => $token]);
+    }
+
+    /** Jeton opaque pour un lien public direct (sans saisie de code). */
+    public function generateToken(): string
+    {
+        do {
+            $token = bin2hex(random_bytes(16));
+        } while ($this->tokenExists($token));
+        return $token;
     }
 
     public function enregistrerVue(int $id): void

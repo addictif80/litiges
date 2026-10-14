@@ -130,6 +130,48 @@ class Auth
         return in_array(self::role(), ['admin', 'gestionnaire'], true);
     }
 
+    /** Modules de l'application soumis aux permissions par role. */
+    public const MODULES = [
+        'litiges'  => 'Litiges',
+        'clients'  => 'Clients',
+        'relances' => 'Relances',
+        'chat'     => 'Messagerie',
+    ];
+
+    /** Roles disposant de reglages de permissions (l'admin a toujours tout). */
+    public const ROLES_CONFIGURABLES = ['gestionnaire', 'consultant', 'lecteur'];
+
+    /** @var array<string,array<string,bool>> Permissions par defaut. */
+    private const PERMISSIONS_DEFAUT = [
+        'gestionnaire' => ['litiges' => true,  'clients' => true,  'relances' => true,  'chat' => true],
+        'consultant'   => ['litiges' => true,  'clients' => true,  'relances' => false, 'chat' => true],
+        'lecteur'      => ['litiges' => true,  'clients' => true,  'relances' => false, 'chat' => true],
+    ];
+
+    /** L'utilisateur connecte a-t-il acces a ce module ? */
+    public static function peut(string $module): bool
+    {
+        $role = self::role();
+        if ($role === 'admin') {
+            return true;
+        }
+        $defaut = self::PERMISSIONS_DEFAUT[$role][$module] ?? false;
+        return Settings::bool('perm_' . $role . '_' . $module, $defaut);
+    }
+
+    /** Libelle lisible d'un role. */
+    public static function roleLabel(?string $role = null): string
+    {
+        $role = $role ?? self::role();
+        return [
+            'admin'        => 'Administrateur',
+            'gestionnaire' => 'Gestionnaire',
+            'consultant'   => 'Consultant',
+            'lecteur'      => 'Lecteur (consultation)',
+            'invite'       => 'Invite',
+        ][$role] ?? ucfirst($role);
+    }
+
     public static function agenceId(): ?int
     {
         $user = self::user();

@@ -33,6 +33,7 @@ use App\Controllers\RelanceController;
 use App\Controllers\SettingController;
 use App\Controllers\ShareController;
 use App\Controllers\UserController;
+use App\Controllers\ChatController;
 use App\Core\Auth;
 use App\Core\Csrf;
 use App\Core\Request;
@@ -74,6 +75,13 @@ $router->post('/reset/{token}', [AuthController::class, 'reset'], 'guest');
 // Tableau de bord
 $router->get('/', [DashboardController::class, 'index'], 'auth');
 
+// Messagerie
+$router->get('/chat', [ChatController::class, 'index'], 'module:chat');
+$router->post('/chat', [ChatController::class, 'store'], 'module:chat');
+$router->get('/chat/{id}', [ChatController::class, 'show'], 'module:chat');
+$router->post('/chat/{id}/messages', [ChatController::class, 'storeMessage'], 'module:chat');
+$router->get('/chat/{id}/flux', [ChatController::class, 'flux'], 'module:chat');
+
 // Profil
 $router->get('/profil', [ProfileController::class, 'show'], 'auth');
 $router->post('/profil', [ProfileController::class, 'update'], 'auth');
@@ -86,23 +94,23 @@ $router->post('/notifications/lu', [NotificationController::class, 'markAll'], '
 $router->post('/notifications/{id}/lu', [NotificationController::class, 'mark'], 'auth');
 
 // Litiges (les routes specifiques doivent preceder /litiges/{id})
-$router->get('/litiges', [LitigeController::class, 'index'], 'auth');
-$router->get('/litiges/nouveau', [LitigeController::class, 'create'], 'write');
-$router->post('/litiges', [LitigeController::class, 'store'], 'write');
-$router->get('/litiges/{id}', [LitigeController::class, 'show'], 'auth');
-$router->get('/litiges/{id}/modifier', [LitigeController::class, 'edit'], 'write');
-$router->post('/litiges/{id}/modifier', [LitigeController::class, 'update'], 'write');
-$router->post('/litiges/{id}/statut', [LitigeController::class, 'changerStatut'], 'write');
+$router->get('/litiges', [LitigeController::class, 'index'], 'module:litiges');
+$router->get('/litiges/nouveau', [LitigeController::class, 'create'], 'modulewrite:litiges');
+$router->post('/litiges', [LitigeController::class, 'store'], 'modulewrite:litiges');
+$router->get('/litiges/{id}', [LitigeController::class, 'show'], 'module:litiges');
+$router->get('/litiges/{id}/modifier', [LitigeController::class, 'edit'], 'modulewrite:litiges');
+$router->post('/litiges/{id}/modifier', [LitigeController::class, 'update'], 'modulewrite:litiges');
+$router->post('/litiges/{id}/statut', [LitigeController::class, 'changerStatut'], 'modulewrite:litiges');
 $router->post('/litiges/{id}/supprimer', [LitigeController::class, 'destroy'], 'admin');
 
 // Relances
-$router->post('/litiges/{id}/relances', [RelanceController::class, 'store'], 'write');
-$router->post('/litiges/{id}/relances/{relanceId}/supprimer', [RelanceController::class, 'destroy'], 'write');
+$router->post('/litiges/{id}/relances', [RelanceController::class, 'store'], 'modulewrite:relances');
+$router->post('/litiges/{id}/relances/{relanceId}/supprimer', [RelanceController::class, 'destroy'], 'modulewrite:relances');
 
 // Notes
-$router->post('/litiges/{id}/notes', [NoteController::class, 'store'], 'write');
-$router->post('/litiges/{id}/notes/{noteId}', [NoteController::class, 'update'], 'write');
-$router->post('/litiges/{id}/notes/{noteId}/supprimer', [NoteController::class, 'destroy'], 'write');
+$router->post('/litiges/{id}/notes', [NoteController::class, 'store'], 'modulewrite:litiges');
+$router->post('/litiges/{id}/notes/{noteId}', [NoteController::class, 'update'], 'modulewrite:litiges');
+$router->post('/litiges/{id}/notes/{noteId}/supprimer', [NoteController::class, 'destroy'], 'modulewrite:litiges');
 
 // Documents
 $router->post('/litiges/{id}/documents', [DocumentController::class, 'storeLitige'], 'write');
@@ -111,19 +119,22 @@ $router->get('/documents/{id}/telecharger', [DocumentController::class, 'downloa
 $router->post('/documents/{id}/supprimer', [DocumentController::class, 'destroy'], 'write');
 
 // Clients
-$router->get('/clients', [ClientController::class, 'index'], 'auth');
-$router->get('/clients/nouveau', [ClientController::class, 'create'], 'write');
-$router->post('/clients', [ClientController::class, 'store'], 'write');
-$router->get('/clients/{id}', [ClientController::class, 'show'], 'auth');
-$router->get('/clients/{id}/modifier', [ClientController::class, 'edit'], 'write');
-$router->post('/clients/{id}/modifier', [ClientController::class, 'update'], 'write');
-$router->post('/clients/{id}/rafraichir', [ClientController::class, 'rafraichir'], 'write');
+$router->get('/clients', [ClientController::class, 'index'], 'module:clients');
+$router->get('/clients/nouveau', [ClientController::class, 'create'], 'modulewrite:clients');
+$router->post('/clients', [ClientController::class, 'store'], 'modulewrite:clients');
+$router->get('/clients/{id}', [ClientController::class, 'show'], 'module:clients');
+$router->get('/clients/{id}/modifier', [ClientController::class, 'edit'], 'modulewrite:clients');
+$router->post('/clients/{id}/modifier', [ClientController::class, 'update'], 'modulewrite:clients');
+$router->post('/clients/{id}/rafraichir', [ClientController::class, 'rafraichir'], 'modulewrite:clients');
+$router->post('/clients/{id}/analyser-ia', [ClientController::class, 'analyserIa'], 'modulewrite:clients');
+$router->post('/clients/{id}/notes', [ClientController::class, 'storeNote'], 'modulewrite:clients');
+$router->post('/clients/{id}/notes/{noteId}/supprimer', [ClientController::class, 'destroyNote'], 'modulewrite:clients');
 $router->post('/clients/{id}/supprimer', [ClientController::class, 'destroy'], 'admin');
 
 // Contacts
-$router->post('/clients/{id}/contacts', [ContactController::class, 'store'], 'write');
-$router->post('/clients/{id}/contacts/{contactId}', [ContactController::class, 'update'], 'write');
-$router->post('/clients/{id}/contacts/{contactId}/supprimer', [ContactController::class, 'destroy'], 'write');
+$router->post('/clients/{id}/contacts', [ContactController::class, 'store'], 'modulewrite:clients');
+$router->post('/clients/{id}/contacts/{contactId}', [ContactController::class, 'update'], 'modulewrite:clients');
+$router->post('/clients/{id}/contacts/{contactId}/supprimer', [ContactController::class, 'destroy'], 'modulewrite:clients');
 
 // API entreprises (JSON)
 $router->get('/api/entreprises', [CompanyController::class, 'search'], 'auth');
@@ -160,10 +171,13 @@ $router->get('/partages', [PartageController::class, 'index'], 'write');
 $router->post('/partages', [PartageController::class, 'store'], 'write');
 $router->post('/partages/{id}/basculer', [PartageController::class, 'toggle'], 'write');
 $router->post('/partages/{id}/supprimer', [PartageController::class, 'destroy'], 'write');
+$router->post('/litiges/{id}/partage', [PartageController::class, 'storeLitige'], 'write');
 
-// Consultation publique (code d'acces, sans compte)
+// Consultation publique (code d'acces ou lien, sans compte)
 $router->get('/partage', [ShareController::class, 'form']);
 $router->post('/partage', [ShareController::class, 'access']);
+$router->get('/partage/lien/{token}', [ShareController::class, 'viaLien']);
+$router->get('/p/{token}', [ShareController::class, 'viaLien']);
 $router->get('/partage/consultation', [ShareController::class, 'index']);
 $router->get('/partage/consultation/{id}', [ShareController::class, 'show']);
 $router->post('/partage/quitter', [ShareController::class, 'exitShare']);

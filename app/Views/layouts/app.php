@@ -23,17 +23,18 @@ try {
             [],
             0
         );
+        $nbMessagesNonLus = \App\Core\Auth::peut('chat') ? (new \App\Models\Chat())->nonLus((int) $authUser['id'], \App\Core\Auth::agenceId(), \App\Core\Auth::isAdmin()) : 0;
     }
 } catch (\Throwable $e) {
     // Pas bloquant pour l'affichage.
 }
 
-$estAdmin = ($authUser['role'] ?? '') === 'admin';
-$peutEcrire = in_array($authUser['role'] ?? '', ['admin', 'gestionnaire'], true);
+$estAdmin = \App\Core\Auth::isAdmin();
+$peutEcrire = \App\Core\Auth::canWrite();
 $icones = [
     'dashboard' => '▦', 'litiges' => '⚖', 'clients' => '🏢', 'relances' => '🔔',
     'users' => '👥', 'agences' => '🏬', 'partages' => '🔗', 'statuts' => '⚙',
-    'parametres' => '🛠', 'audit' => '📋', 'profil' => '👤',
+    'parametres' => '🛠', 'audit' => '📋', 'profil' => '👤', 'chat' => '💬',
 ];
 ?>
 <!doctype html>
@@ -57,14 +58,20 @@ $icones = [
             <a href="<?= url('/') ?>" class="<?= $currentPath === '/' ? 'is-active' : '' ?>">
                 <span class="ic"><?= $icones['dashboard'] ?></span> Tableau de bord
             </a>
+            <?php if (\App\Core\Auth::peut('litiges')): ?>
             <a href="<?= url('/litiges') ?>" class="<?= is_active_menu('/litiges') ?>">
                 <span class="ic"><?= $icones['litiges'] ?></span> Litiges
                 <?php if ($nbRelancesDues > 0): ?><span class="badge-nb"><?= (int) $nbRelancesDues ?></span><?php endif; ?>
             </a>
+            <?php endif; ?>
+
+            <?php if (\App\Core\Auth::peut('clients')): ?>
             <a href="<?= url('/clients') ?>" class="<?= is_active_menu('/clients') ?>">
                 <span class="ic"><?= $icones['clients'] ?></span> Clients
             </a>
-            <?php if ($peutEcrire): ?>
+            <?php endif; ?>
+
+            <?php if (\App\Core\Auth::peut('relances') && $peutEcrire): ?>
                 <a href="<?= url('/litiges?relance_due=1&etat=ouverts') ?>" class="<?= is_active_menu('/relances') ?>">
                     <span class="ic"><?= $icones['relances'] ?></span> Relances à faire
                     <?php if ($nbRelancesDues > 0): ?><span class="badge-nb"><?= (int) $nbRelancesDues ?></span><?php endif; ?>
@@ -79,6 +86,13 @@ $icones = [
                 <a href="<?= url('/agences') ?>" class="<?= is_active_menu('/agences') ?>">
                     <span class="ic"><?= $icones['agences'] ?></span> Agences
                 </a>
+            <?php endif; ?>
+
+            <?php if (\App\Core\Auth::peut('chat')): ?>
+            <a href="<?= url('/chat') ?>" class="<?= is_active_menu('/chat') ?>">
+                <span class="ic"><?= $icones['chat'] ?? '💬' ?></span> Messagerie
+                <?php if (!empty($nbMessagesNonLus)): ?><span class="badge-nb"><?= (int) $nbMessagesNonLus ?></span><?php endif; ?>
+            </a>
             <?php endif; ?>
 
             <?php if ($peutEcrire): ?>
@@ -110,12 +124,14 @@ $icones = [
             <div class="titre-page"><?= e($titre) ?></div>
             <div class="esp"></div>
 
-            <a href="<?= url('/notifications') ?>" title="Notifications" style="position:relative;font-size:19px">
-                🔔
-                <?php if ($nbNotifications > 0): ?>
-                    <span class="badge-nb" style="position:absolute;top:-6px;right:-10px;background:var(--rouge);color:#fff;border-radius:20px;padding:0 6px;font-size:11px"><?= (int) $nbNotifications ?></span>
-                <?php endif; ?>
-            </a>
+            <?php if (\App\Core\Auth::peut('chat')): ?>
+                <a href="<?= url('/chat') ?>" title="Messagerie" style="position:relative;font-size:19px;margin-right:4px">
+                    💬
+                    <?php if (!empty($nbMessagesNonLus)): ?>
+                        <span class="badge-nb" style="position:absolute;top:-6px;right:-10px;background:var(--bleu-600);color:#fff;border-radius:20px;padding:0 6px;font-size:11px"><?= (int) $nbMessagesNonLus ?></span>
+                    <?php endif; ?>
+                </a>
+            <?php endif; ?>
 
             <details style="position:relative">
                 <summary style="list-style:none;cursor:pointer">
@@ -123,7 +139,7 @@ $icones = [
                         <span class="avatar"><?= e(initials($authUser['full_name'] ?? ($authUser['username'] ?? ''))) ?></span>
                         <span>
                             <span style="display:block;font-weight:600;font-size:13.5px"><?= e($authUser['full_name'] ?: $authUser['username']) ?></span>
-                            <span class="petit texte-doux" style="text-transform:capitalize"><?= e($authUser['role']) ?></span>
+                            <span class="petit texte-doux" style="text-transform:capitalize"><?= e(\App\Core\Auth::roleLabel()) ?></span>
                         </span>
                     </span>
                 </summary>

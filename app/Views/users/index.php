@@ -21,9 +21,9 @@
                 <td class="petit"><?= e($u['email'] ?: '—') ?></td>
                 <td>
                     <?php
-                    $couleurs = ['admin' => 'var(--rouge)', 'gestionnaire' => 'var(--bleu-600)', 'lecteur' => 'var(--gris)'];
+                    $couleurs = ['admin' => 'var(--rouge)', 'gestionnaire' => 'var(--bleu-600)', 'consultant' => 'var(--violet)', 'lecteur' => 'var(--gris)'];
                     ?>
-                    <span class="badge" style="background:<?= $couleurs[$u['role']] ?? 'var(--gris)' ?>"><?= e(ucfirst($u['role'])) ?></span>
+                    <span class="badge" style="background:<?= $couleurs[$u['role']] ?? 'var(--gris)' ?>"><?= e(\App\Core\Auth::roleLabel($u['role'])) ?></span>
                 </td>
                 <td class="petit"><?= e($u['agence_nom'] ?: '—') ?></td>
                 <td class="petit"><?= $u['last_login_at'] ? datetime_fr($u['last_login_at']) : 'Jamais' ?></td>
@@ -63,6 +63,7 @@
         <strong>Rôles :</strong>
         <em>Administrateur</em> — accès total (utilisateurs, paramètres, audit, suppression).
         <em>Gestionnaire</em> — création/modification des litiges, clients et relances.
+        <em>Consultant</em> — consultation, peut voir clients/litiges/relances selon les permissions.
         <em>Lecteur</em> — consultation uniquement (aucune modification).
     </div>
 </div>

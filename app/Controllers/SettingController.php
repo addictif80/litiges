@@ -108,6 +108,10 @@ class SettingController extends Controller
             'company_api_provider', 'recuperation_auto_active', 'verrouillage_tentatives',
             'verrouillage_minutes', 'max_upload_mo',
             'smtp_host', 'smtp_port', 'smtp_user', 'smtp_secure', 'smtp_from', 'smtp_from_nom',
+            'oneminai_enabled', 'oneminai_api_key', 'oneminai_model',
+            'perm_gestionnaire_litiges', 'perm_gestionnaire_clients', 'perm_gestionnaire_relances', 'perm_gestionnaire_chat',
+            'perm_consultant_litiges',   'perm_consultant_clients',   'perm_consultant_relances',   'perm_consultant_chat',
+            'perm_lecteur_litiges',      'perm_lecteur_clients',      'perm_lecteur_relances',      'perm_lecteur_chat',
         ];
 
         $pairs = [];
@@ -118,6 +122,21 @@ class SettingController extends Controller
         $pairs['email_notifications'] = $this->post('email_notifications') !== null ? '1' : '0';
         $pairs['bodacc_actif']        = $this->post('bodacc_actif') !== null ? '1' : '0';
         $pairs['score_interne_actif'] = $this->post('score_interne_actif') !== null ? '1' : '0';
+        $pairs['oneminai_enabled']    = $this->post('oneminai_enabled') !== null ? '1' : '0';
+
+        // Permissions des roles
+        $pairs['perm_gestionnaire_litiges']  = $this->post('perm_gestionnaire_litiges')  !== null ? '1' : '0';
+        $pairs['perm_gestionnaire_clients']  = $this->post('perm_gestionnaire_clients')  !== null ? '1' : '0';
+        $pairs['perm_gestionnaire_relances'] = $this->post('perm_gestionnaire_relances') !== null ? '1' : '0';
+        $pairs['perm_gestionnaire_chat']     = $this->post('perm_gestionnaire_chat')     !== null ? '1' : '0';
+        $pairs['perm_consultant_litiges']    = $this->post('perm_consultant_litiges')    !== null ? '1' : '0';
+        $pairs['perm_consultant_clients']    = $this->post('perm_consultant_clients')    !== null ? '1' : '0';
+        $pairs['perm_consultant_relances']   = $this->post('perm_consultant_relances')   !== null ? '1' : '0';
+        $pairs['perm_consultant_chat']       = $this->post('perm_consultant_chat')       !== null ? '1' : '0';
+        $pairs['perm_lecteur_litiges']       = $this->post('perm_lecteur_litiges')       !== null ? '1' : '0';
+        $pairs['perm_lecteur_clients']       = $this->post('perm_lecteur_clients')       !== null ? '1' : '0';
+        $pairs['perm_lecteur_relances']      = $this->post('perm_lecteur_relances')      !== null ? '1' : '0';
+        $pairs['perm_lecteur_chat']          = $this->post('perm_lecteur_chat')          !== null ? '1' : '0';
 
         // Le mot de passe SMTP n'est modifie que s'il est renseigne.
         $smtpPass = (string) $this->post('smtp_pass', '');
@@ -129,6 +148,12 @@ class SettingController extends Controller
         $token = trim((string) $this->post('pappers_api_token', ''));
         if ($token !== '' && !str_starts_with($token, '••••')) {
             $pairs['pappers_api_token'] = $token;
+        }
+
+        // Cle API 1min.ai n'est remplacee que si fournie.
+        $iaKey = trim((string) $this->post('oneminai_api_key', ''));
+        if ($iaKey !== '' && !str_starts_with($iaKey, '••••')) {
+            $pairs['oneminai_api_key'] = $iaKey;
         }
 
         Settings::setMany($pairs);
