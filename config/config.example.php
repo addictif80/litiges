@@ -61,6 +61,14 @@ return [
             'timeout'  => 8,
             'actif'    => true,
         ],
+        // BODACC : annonces legales (procedures collectives, radiations...).
+        // Donnees ouvertes, gratuites et sans cle.
+        'bodacc' => [
+            'base_url' => 'https://bodacc-datadila.opendatasoft.com',
+            'dataset'  => 'annonces-commerciales',
+            'timeout'  => 8,
+            'actif'    => true,   // surcharge possible via les Parametres (bodacc_actif)
+        ],
         'pappers' => [
             'base_url' => 'https://api.pappers.fr/v2',
             'api_token' => '',   // jeton Pappers (peut etre surcharge dans les Parametres)

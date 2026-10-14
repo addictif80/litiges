@@ -161,7 +161,8 @@ class ClientController extends Controller
         }
 
         $service = new CompanyLookupService();
-        $donnees = $service->lookup((string) $client['siren']);
+        $encours = $clients->encours((int) $id);
+        $donnees = $service->lookup((string) $client['siren'], $encours);
 
         if ($donnees === null) {
             flash('error', "Aucune donnee trouvee pour le SIREN " . $client['siren'] . '.');
@@ -170,6 +171,7 @@ class ClientController extends Controller
 
         $champs = $service->filtrerChamps($donnees);
         unset($champs['raison_sociale']); // On conserve la denomination interne.
+        $champs['data_synced_at'] = date('Y-m-d H:i:s');
 
         $clients->update((int) $id, $champs);
         Audit::log('client_sync_api', 'client', (int) $id, ['source' => $donnees['_source'] ?? null]);

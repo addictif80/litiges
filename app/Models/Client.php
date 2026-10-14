@@ -60,6 +60,18 @@ class Client extends Model
         return $this->findBy('siren', $siren);
     }
 
+    /** Encours client = litiges non clotures (principal + penalites - recupere). */
+    public function encours(int $clientId): float
+    {
+        return (float) Database::value(
+            'SELECT COALESCE(SUM(l.montant_principal + l.montant_penalites - l.montant_recupere),0)
+             FROM litiges l JOIN litige_statuts s ON s.id = l.statut_id
+             WHERE l.client_id = :c AND s.cloturant = 0',
+            ['c' => $clientId],
+            0
+        );
+    }
+
     /** Cree ou met a jour un client a partir des donnees d'une API entreprise. */
     public function upsertFromApi(array $mapped, int $userId): int
     {

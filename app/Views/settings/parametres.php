@@ -61,7 +61,7 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
                 <div class="form-groupe">
                     <label for="company_api_provider">Fournisseur</label>
                     <select id="company_api_provider" name="company_api_provider">
-                        <option value="auto" <?= $s('company_api_provider') === 'auto' ? 'selected' : '' ?>>Automatique (Pappers si clé, sinon API de l'État)</option>
+                        <option value="auto" <?= $s('company_api_provider') === 'auto' ? 'selected' : '' ?>>Automatique (Pappers si clé, sinon API de l'État + BODACC + score interne)</option>
                         <option value="recherche_entreprises" <?= $s('company_api_provider') === 'recherche_entreprises' ? 'selected' : '' ?>>API Recherche d'entreprises (État, gratuite)</option>
                         <option value="pappers" <?= $s('company_api_provider') === 'pappers' ? 'selected' : '' ?>>Pappers uniquement</option>
                     </select>
@@ -73,11 +73,15 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
                 </div>
             </div>
             <label class="check"><input type="checkbox" name="recuperation_auto_active" value="1" <?= (int) $s('recuperation_auto_active', 1) === 1 ? 'checked' : '' ?>> Activer la récupération automatique des données entreprise</label>
+            <label class="check mt-2"><input type="checkbox" name="bodacc_actif" value="1" <?= (int) $s('bodacc_actif', 1) === 1 ? 'checked' : '' ?>> Enrichir avec le BODACC (procédures collectives / radiations, gratuit)</label>
+            <label class="check"><input type="checkbox" name="score_interne_actif" value="1" <?= (int) $s('score_interne_actif', 1) === 1 ? 'checked' : '' ?>> Calculer un score de solvabilité interne (gratuit, sans service payant)</label>
             <div class="mt-2 petit texte-doux">
                 Sources disponibles :
                 État <?= $sources['recherche_entreprises'] ? '<span class="texte-vert">✔</span>' : '<span class="texte-rouge">✘</span>' ?> ·
+                BODACC <?= $sources['bodacc'] ? '<span class="texte-vert">✔</span>' : '<span class="texte-rouge">✘ (désactivé)</span>' ?> ·
                 Pappers <?= $sources['pappers'] ? '<span class="texte-vert">✔</span>' : '<span class="texte-rouge">✘ (clé absente)</span>' ?>
             </div>
+            <div class="aide mt-2">Les sources de l'État et le BODACC sont gratuites et sans clé. Pappers reste optionnel.</div>
         </div>
     </div>
 

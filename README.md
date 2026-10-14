@@ -5,7 +5,9 @@ et de machines de chantier** : suivi des dossiers, relances, recouvrement, conta
 pièces jointes, statistiques, export CSV et consultation en lecture seule pour les agences.
 
 Les données des entreprises clientes sont récupérées automatiquement depuis l'**API Recherche
-d'entreprises de l'État** (gratuite, sans clé) ou depuis **Pappers** (si une clé API est fournie).
+d'entreprises de l'État** (gratuite, sans clé) et enrichies avec le **BODACC** (procédures
+collectives, radiations) et un **score de solvabilité interne** — le tout gratuit. **Pappers**
+reste disponible en option si une clé API est fournie.
 
 ---
 
@@ -41,7 +43,8 @@ d'entreprises de l'État** (gratuite, sans clé) ou depuis **Pappers** (si une c
   honorées, échéances proches).
 - **Notes internes** et **documents** (pièces jointes) par litige, stockés hors racine web.
 - **Clients et contacts** : fiche entreprise alimentée automatiquement (SIREN, SIRET, adresse,
-  effectif, procédure collective…), gestion des contacts et des documents client.
+  effectif, procédure collective…), score de solvabilité interne, gestion des contacts et des
+  documents client.
 - **Tableau de bord & statistiques** : encours, taux de recouvrement, répartition par statut,
   évolution mensuelle, top clients, encours par agence et par gestionnaire.
 - **Export CSV** des litiges et du journal d'audit.
@@ -140,6 +143,7 @@ Principales clés :
 | `db.*` | Connexion MySQL. |
 | `security.*` | Longueur minimale du mot de passe, verrouillage, durée de session, HTTPS forcé. |
 | `apis.recherche_entreprises` | API de l'État (gratuite, activée par défaut). |
+| `apis.bodacc` | API BODACC (annonces légales, gratuite, activée par défaut). |
 | `apis.pappers.api_token` | Clé Pappers (optionnelle). |
 | `mail.*` | Paramètres SMTP (optionnels). |
 
@@ -183,18 +187,33 @@ Le journal d'exécution est écrit dans `storage/logs/cron-rappels.log`.
 
 ## Sources de données entreprises
 
-La fiche client peut être pré-remplie depuis une source externe, choisie dans **Paramètres** :
+La pile par défaut est **100 % gratuite et sans clé** :
+
+- **API Recherche d'entreprises** (État) : identité complète (SIREN, SIRET, TVA, forme
+  juridique, code APE, adresse, effectif, date de création, capital, chiffres clés, statut) ;
+- **BODACC** (annonces légales, DILA) : procédures collectives (redressement, liquidation,
+  sauvegarde, conciliation) et radiations ;
+- **Score de solvabilité interne** : calcul local (aucun service payant) à partir des données
+  publiques (résultat net, chiffre d'affaires, ancienneté, effectif) et de l'encours client
+  interne (litiges non clôturés).
+
+Le fournisseur principal se choisit dans **Paramètres** :
 
 - **`auto`** (par défaut) : Pappers si une clé est présente, sinon l'API de l'État ;
 - **`recherche_entreprises`** : API publique **Recherche d'entreprises** (État, gratuite, sans clé) ;
 - **`pappers`** : **Pappers** uniquement (clé requise).
 
+Quel que soit le fournisseur, la fiche est enrichie par le BODACC et le score interne, tous deux
+activables dans **Paramètres → Source de données entreprises**. Pappers n'est donc **plus
+nécessaire** : il apporte seulement un score financier maison en complément.
+
 Depuis la fiche client, le widget de recherche permet de saisir un nom ou un SIREN, de choisir
 l'entreprise puis d'importer automatiquement : SIREN, SIRET, TVA, forme juridique, code APE,
-adresse, effectif, date de création, capital, chiffres clés, statut et procédure collective.
+adresse, effectif, date de création, capital, chiffres clés, statut, procédure collective et score
+de solvabilité.
 
-Clé Pappers : créez un compte sur [pappers.fr](https://www.pappers.fr) et collez le jeton
-dans **Paramètres → Source de données entreprises**. Sans clé, l'API de l'État est utilisée.
+Clé Pappers (optionnelle) : créez un compte sur [pappers.fr](https://www.pappers.fr) et collez le
+jeton dans **Paramètres → Source de données entreprises**.
 
 ---
 
@@ -248,7 +267,7 @@ app/
 ├── Core/                    # Noyau : Router, Database, Auth, Csrf, View, Validator…
 ├── Models/                  # Modèles (accès base de données)
 ├── Services/                # APIs entreprises, uploads, emails, rappels, export
-│   └── Api/                 # Clients API Pappers / Recherche d'entreprises
+│   └── Api/                 # Clients API Recherche d'entreprises / BODACC / Pappers
 └── Views/                   # Gabarits PHP (layouts, pages, partials)
 
 config/
@@ -296,7 +315,7 @@ Après une mise à jour du code, pensez à vider le cache de l'OPcache si vous l
 | « Configuration introuvable » | `config/config.php` absent : relancez l'installation. |
 | Le cron ne fait rien | Vérifiez le chemin absolu de PHP et du script ; testez avec `--dry-run`. |
 | Pas d'emails | Renseignez les paramètres SMTP et cochez « Envoyer les notifications par email ». |
-| Données entreprise vides | Vérifiez la connexion sortante HTTPS ; la clé Pappers est optionnelle (l'API de l'État suffit). |
+| Données entreprise vides | Vérifiez la connexion sortante HTTPS ; les sources de l'État et le BODACC sont gratuites et sans clé (Pappers est optionnel). |
 | URL d'assets incorrecte | Ajustez `app.url` (sans slash final) dans `config.php`. |
 
 ---

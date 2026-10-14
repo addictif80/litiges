@@ -12,6 +12,7 @@ foreach ($litiges as $l) {
         $encours += (float) $l['montant_principal'] + (float) $l['montant_penalites'] - (float) $l['montant_recupere'];
     }
 }
+$solvabilite = (new \App\Services\SolvabiliteService())->calculer($client, $encours);
 ?>
 <div class="fil"><a href="<?= url('/clients') ?>">Clients</a> / <?= e($client['raison_sociale']) ?></div>
 
@@ -187,7 +188,7 @@ foreach ($litiges as $l) {
                     <dt>Capital</dt><dd><?= $client['capital'] !== null ? money($client['capital']) : '—' ?></dd>
                     <dt>Résultat net</dt><dd class="<?= ((float) $client['resultat_net']) < 0 ? 'texte-rouge' : '' ?>"><?= $client['resultat_net'] !== null ? money($client['resultat_net']) : '—' ?></dd>
                     <dt>Procédure coll.</dt><dd class="<?= $client['procedure_collective'] ? 'texte-rouge gras' : '' ?>"><?= e($client['procedure_collective'] ?: 'Aucune') ?></dd>
-                    <dt>Score</dt><dd><?= e($client['score_solvabilite'] ?: '—') ?></dd>
+                    <dt>Score interne</dt><dd><span class="badge" style="background:<?= e($solvabilite['couleur']) ?>"><?= (int) $solvabilite['score'] ?>/100 · <?= e($solvabilite['label']) ?></span></dd>
                 </dl>
                 <div class="mt-2">
                     <label>Adresse complète</label>
@@ -207,5 +208,25 @@ foreach ($litiges as $l) {
                 <div class="card-corps" style="white-space:pre-wrap"><?= e($client['notes']) ?></div>
             </div>
         <?php endif; ?>
+
+        <div class="card">
+            <div class="card-entete"><h3>Solvabilité (score interne)</h3></div>
+            <div class="card-corps">
+                <div class="flex" style="align-items:center;gap:10px">
+                    <span class="badge" style="background:<?= e($solvabilite['couleur']) ?>;font-size:15px"><?= (int) $solvabilite['score'] ?>/100</span>
+                    <strong><?= e($solvabilite['label']) ?></strong>
+                </div>
+                <?php if (!empty($solvabilite['facteurs'])): ?>
+                    <ul class="petit texte-doux mt-2" style="margin:0;padding-left:18px">
+                        <?php foreach ($solvabilite['facteurs'] as $facteur): ?>
+                            <li><?= e($facteur) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php else: ?>
+                    <div class="petit texte-doux mt-2">Pas assez de données financières pour affiner le score.</div>
+                <?php endif; ?>
+                <div class="petit texte-doux mt-2">Calcul local et gratuit, à partir des données publiques et de l'encours interne.</div>
+            </div>
+        </div>
     </div>
 </div>

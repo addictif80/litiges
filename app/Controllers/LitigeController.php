@@ -18,6 +18,7 @@ use App\Models\LitigeStatut;
 use App\Models\Relance;
 use App\Models\User;
 use App\Services\ExportService;
+use App\Services\CompanyLookupService;
 
 class LitigeController extends Controller
 {
@@ -352,16 +353,19 @@ class LitigeController extends Controller
 
     private function syncClientSolvabilite(int $clientId): void
     {
-        // Rien de bloquant : preparation d'un score interne simple.
+        // Recalcul du score de solvabilite interne (gratuit) avec l'encours a jour.
         try {
-            $encours = (float) Database::value(
-                "SELECT COALESCE(SUM(l.montant_principal + l.montant_penalites - l.montant_recupere),0)
-                 FROM litiges l JOIN litige_statuts s ON s.id = l.statut_id
-                 WHERE l.client_id = :c AND s.cloturant = 0",
-                ['c' => $clientId],
-                0
-            );
-            Audit::log('score_client', 'client', $clientId, ['encours' => $encours]);
+            $clients = new Client();
+            $client  = $clients->find($clientId);
+            if (!$client) {
+                return;
+            }
+
+            $encours = $clients->encours($clientId);
+            $score   = (new CompanyLookupService())->scoreSolvabilite($client, $encours);
+
+            $clients->update($clientId, ['score_solvabilite' => $score]);
+            Audit::log('score_client', 'client', $clientId, ['encours' => $encours, 'score' => $score]);
         } catch (\Throwable) {
             // ignore
         }

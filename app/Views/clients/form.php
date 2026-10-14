@@ -21,8 +21,8 @@ $sourcesOk = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
         <h3>🔎 Récupération automatique des données entreprise</h3>
         <div class="esp"></div>
         <span class="petit texte-doux">
-            Source :
-            <?= $sourcesOk['pappers'] ? 'Pappers' : 'API Recherche d\'entreprises (État, gratuite)' ?>
+            Sources :
+            <?= $sourcesOk['pappers'] ? 'Pappers' : 'API Recherche d\'entreprises (État, gratuite)' ?><?= !empty($sourcesOk['bodacc']) ? ' + BODACC' : '' ?>
         </span>
     </div>
     <div class="card-corps">

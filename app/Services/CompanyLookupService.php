@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Settings;
+use App\Services\Api\BodaccApi;
 use App\Services\Api\PappersApi;
 use App\Services\Api\RechercheEntreprisesApi;
 
@@ -14,18 +15,26 @@ use App\Services\Api\RechercheEntreprisesApi;
  *   - auto                : Pappers si un jeton est present, sinon API de l'Etat
  *   - pappers             : Pappers uniquement
  *   - recherche_entreprises : API gratuite de l'Etat uniquement
+ *
+ * Dans tous les cas, la fiche peut etre enrichie avec des sources GRATUITES :
+ *   - BODACC : procedures collectives / radiations (annonces officielles) ;
+ *   - score de solvabilite interne (calcul local, sans service payant).
  */
 class CompanyLookupService
 {
     private RechercheEntreprisesApi $etat;
     private PappersApi $pappers;
+    private BodaccApi $bodacc;
+    private SolvabiliteService $solvabilite;
     private string $provider;
 
     public function __construct(?string $pappersToken = null)
     {
-        $this->etat     = new RechercheEntreprisesApi();
-        $this->pappers  = new PappersApi($pappersToken);
-        $this->provider = (string) Settings::get('company_api_provider', 'auto');
+        $this->etat        = new RechercheEntreprisesApi();
+        $this->pappers     = new PappersApi($pappersToken);
+        $this->bodacc      = new BodaccApi();
+        $this->solvabilite = new SolvabiliteService();
+        $this->provider    = (string) Settings::get('company_api_provider', 'auto');
     }
 
     public function provider(): string
@@ -37,6 +46,7 @@ class CompanyLookupService
     {
         return [
             'recherche_entreprises' => $this->etat->isConfigured(),
+            'bodacc'                => $this->bodacc->isConfigured(),
             'pappers'               => $this->pappers->isConfigured(),
         ];
     }
@@ -65,7 +75,7 @@ class CompanyLookupService
     }
 
     /** Recherche par SIREN ou SIRET (14 chiffres -> on garde les 9 premiers). */
-    public function lookup(string $identifiant): ?array
+    public function lookup(string $identifiant, ?float $encours = null): ?array
     {
         $digits = preg_replace('/\D/', '', $identifiant) ?? '';
         if (strlen($digits) === 14) {
@@ -92,8 +102,53 @@ class CompanyLookupService
             return null;
         }
 
+        $resultat = $this->enrichir($resultat, $encours);
         $resultat['_source'] = $source;
         return $resultat;
+    }
+
+    /**
+     * Enrichit une fiche entreprise avec les sources gratuites :
+     * procedures collectives (BODACC) et score de solvabilite interne.
+     *
+     * @param array<string,mixed> $donnees
+     * @return array<string,mixed>
+     */
+    public function enrichir(array $donnees, ?float $encours = null): array
+    {
+        $siren = (string) ($donnees['siren'] ?? '');
+
+        if ($siren !== '' && $this->bodacc->isConfigured()) {
+            $procedure = $this->bodacc->procedureCollective($siren);
+            if ($procedure !== null) {
+                $donnees['procedure_collective']         = $procedure['libelle'];
+                $donnees['procedure_collective_detail']  = $procedure;
+                $donnees['_bodacc']                      = true;
+            }
+        }
+
+        if ($this->scoreInterneActif()) {
+            $donnees['score_solvabilite'] = $this->solvabilite->chaine($donnees, $encours);
+        }
+
+        return $donnees;
+    }
+
+    /** Details du score de solvabilite interne (score, label, couleur, facteurs). */
+    public function analyseSolvabilite(array $entreprise, ?float $encours = null): array
+    {
+        return $this->solvabilite->calculer($entreprise, $encours);
+    }
+
+    /** Score de solvabilite interne formate (ex. "72/100 Correct"). */
+    public function scoreSolvabilite(array $entreprise, ?float $encours = null): string
+    {
+        return $this->solvabilite->chaine($entreprise, $encours);
+    }
+
+    private function scoreInterneActif(): bool
+    {
+        return Settings::bool('score_interne_actif', true);
     }
 
     /**
@@ -119,7 +174,7 @@ class CompanyLookupService
             return null;
         }
 
-        return $this->etat->normalize($response['json']['results'][0]);
+        return $this->enrichir($this->etat->normalize($response['json']['results'][0]));
     }
 
     private function usePappers(): bool

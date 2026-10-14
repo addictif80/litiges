@@ -116,6 +116,8 @@ class SettingController extends Controller
             $pairs[$cle] = $valeur === null ? '' : (string) $valeur;
         }
         $pairs['email_notifications'] = $this->post('email_notifications') !== null ? '1' : '0';
+        $pairs['bodacc_actif']        = $this->post('bodacc_actif') !== null ? '1' : '0';
+        $pairs['score_interne_actif'] = $this->post('score_interne_actif') !== null ? '1' : '0';
 
         // Le mot de passe SMTP n'est modifie que s'il est renseigne.
         $smtpPass = (string) $this->post('smtp_pass', '');

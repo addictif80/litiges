@@ -372,6 +372,8 @@ INSERT INTO settings (cle, valeur) VALUES
     ('company_api_provider',       'auto'),
     ('pappers_api_token',          ''),
     ('recuperation_auto_active',   '1'),
+    ('bodacc_actif',               '1'),
+    ('score_interne_actif',        '1'),
     ('smtp_host',                  ''),
     ('smtp_port',                  '587'),
     ('smtp_user',                  ''),
