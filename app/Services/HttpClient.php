@@ -90,14 +90,15 @@ class HttpClient
     }
 
     /**
-     * @param array<string,string> $headers
+     * @param array<string,string>|array<int,string> $headers
      * @return array<int,string>
      */
     private static function formatHeaders(array $headers): array
     {
         $out = [];
         foreach ($headers as $nom => $valeur) {
-            $out[] = $nom . ': ' . $valeur;
+            // Tableau associatif « Nom => valeur », ou liste de lignes deja formatees.
+            $out[] = is_int($nom) ? (string) $valeur : $nom . ': ' . $valeur;
         }
         return $out;
     }
@@ -112,7 +113,7 @@ class HttpClient
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS      => 3,
             CURLOPT_USERAGENT      => 'Locavente-Litiges/1.0',
-            CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json'], $headers),
+            CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json'], self::formatHeaders($headers)),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -132,7 +133,7 @@ class HttpClient
                 'method'        => 'GET',
                 'timeout'       => $timeout,
                 'ignore_errors' => true,
-                'header'        => implode("\r\n", array_merge(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json'], $headers)),
+                'header'        => implode("\r\n", array_merge(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json'], self::formatHeaders($headers))),
             ],
             'ssl' => [
                 'verify_peer'      => true,

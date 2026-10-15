@@ -23,7 +23,16 @@ class OneMinAiService
 
     private function apiKey(): string
     {
-        return trim((string) (Settings::get('oneminai_api_key') ?: Config::get('apis.oneminai.api_key', '')));
+        return $this->normaliserCle((string) (Settings::get('oneminai_api_key') ?: Config::get('apis.oneminai.api_key', '')));
+    }
+
+    /**
+     * Nettoie une cle API : espaces, sauts de ligne et espaces insecables
+     * (frequents lors d'un copier/coller depuis une page web).
+     */
+    private function normaliserCle(string $cle): string
+    {
+        return preg_replace('/[\s\x{00A0}\x{2007}\x{200B}\x{202F}\x{2060}\x{FEFF}]+/u', '', $cle) ?? trim($cle);
     }
 
     private function model(): string
@@ -199,7 +208,7 @@ class OneMinAiService
      */
     public function tester(?string $modele = null, ?string $cle = null): array
     {
-        $cle    = ($cle !== null && $cle !== '') ? $cle : $this->apiKey();
+        $cle    = ($cle !== null && $cle !== '') ? $this->normaliserCle($cle) : $this->apiKey();
         $modele = ($modele !== null && $modele !== '') ? $modele : $this->model();
 
         if ($cle === '') {
