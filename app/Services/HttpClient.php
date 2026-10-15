@@ -50,7 +50,7 @@ class HttpClient
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS      => 3,
             CURLOPT_USERAGENT      => 'Locavente-Litiges/1.0',
-            CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json', 'Content-Type: application/json'], self::formatHeaders($headers)),
+            CURLOPT_HTTPHEADER     => self::fusionnerEntetes(['Accept: application/json', 'Content-Type: application/json'], $headers),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -65,7 +65,7 @@ class HttpClient
 
     private static function viaStreamPost(string $url, string $payload, array $headers, int $timeout): array
     {
-        $entetes = array_merge(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json', 'Content-Type: application/json'], self::formatHeaders($headers));
+        $entetes = self::fusionnerEntetes(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json', 'Content-Type: application/json'], $headers);
         $context = stream_context_create([
             'http' => [
                 'method'        => 'POST',
@@ -90,17 +90,33 @@ class HttpClient
     }
 
     /**
-     * @param array<string,string>|array<int,string> $headers
+     * Fusionne des en-tetes par defaut (lignes deja formatees) et des en-tetes
+     * fournis (nom => valeur), en evitant les doublons (insensible a la casse).
+     *
+     * @param array<int,string>                       $defaut
+     * @param array<string,string>|array<int,string>  $fournis
      * @return array<int,string>
      */
-    private static function formatHeaders(array $headers): array
+    private static function fusionnerEntetes(array $defaut, array $fournis): array
     {
-        $out = [];
-        foreach ($headers as $nom => $valeur) {
-            // Tableau associatif « Nom => valeur », ou liste de lignes deja formatees.
-            $out[] = is_int($nom) ? (string) $valeur : $nom . ': ' . $valeur;
+        $parNom = [];
+        foreach ($defaut as $ligne) {
+            $sep = strpos($ligne, ':');
+            $nom = strtolower($sep === false ? $ligne : substr($ligne, 0, $sep));
+            $parNom[$nom] = $ligne;
         }
-        return $out;
+        foreach ($fournis as $nom => $valeur) {
+            if (is_int($nom)) {
+                $ligne = (string) $valeur;
+                $sep   = strpos($ligne, ':');
+                $cle   = strtolower($sep === false ? $ligne : substr($ligne, 0, $sep));
+            } else {
+                $ligne = $nom . ': ' . $valeur;
+                $cle   = strtolower($nom);
+            }
+            $parNom[$cle] = $ligne;
+        }
+        return array_values($parNom);
     }
 
     private static function viaCurl(string $url, array $headers, int $timeout): array
@@ -113,7 +129,7 @@ class HttpClient
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS      => 3,
             CURLOPT_USERAGENT      => 'Locavente-Litiges/1.0',
-            CURLOPT_HTTPHEADER     => array_merge(['Accept: application/json'], self::formatHeaders($headers)),
+            CURLOPT_HTTPHEADER     => self::fusionnerEntetes(['Accept: application/json'], $headers),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -133,7 +149,7 @@ class HttpClient
                 'method'        => 'GET',
                 'timeout'       => $timeout,
                 'ignore_errors' => true,
-                'header'        => implode("\r\n", array_merge(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json'], self::formatHeaders($headers))),
+                'header'        => implode("\r\n", self::fusionnerEntetes(['User-Agent: Locavente-Litiges/1.0', 'Accept: application/json'], $headers)),
             ],
             'ssl' => [
                 'verify_peer'      => true,
