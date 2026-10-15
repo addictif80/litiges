@@ -253,4 +253,179 @@
     }
 
     window.addEventListener('DOMContentLoaded', initChatFlux);
+
+    // --- PWA : installation, détection et guide iOS/Android ---
+    function initPWA() {
+        const banner = document.getElementById('pwa-install-banner');
+        const btnInstall = document.getElementById('pwa-install-btn');
+        const btnCloseBanner = document.getElementById('pwa-install-close');
+        const modalIOS = document.getElementById('pwa-ios-guide');
+        const modalAndroid = document.getElementById('pwa-android-guide');
+        const modals = [modalIOS, modalAndroid];
+
+        let deferredPrompt = null;
+        let dismissedUntil = 0;
+        const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+
+        function isStandalone() {
+            if (typeof window === 'undefined') return false;
+            const mq = window.matchMedia && window.matchMedia('(display-mode: standalone)');
+            if (mq && mq.matches) return true;
+            if (window.navigator && window.navigator.standalone === true) return true;
+            if (document.referrer && document.referrer.startsWith('android-app://')) return true;
+            return false;
+        }
+
+        function isIOS() {
+            if (typeof navigator === 'undefined') return false;
+            const ua = navigator.userAgent || '';
+            return /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        }
+
+        function isAndroid() {
+            if (typeof navigator === 'undefined') return false;
+            const ua = navigator.userAgent || '';
+            return /Android/i.test(ua);
+        }
+
+        function isSafari() {
+            if (typeof navigator === 'undefined') return false;
+            const ua = navigator.userAgent || '';
+            const isChrome = /Chrome/i.test(ua) || /CriOS/i.test(ua);
+            const isEdge = /Edg/i.test(ua);
+            return (/Safari/i.test(ua) && !isChrome && !isEdge);
+        }
+
+        function canShowBanner() {
+            if (isStandalone()) return false;
+            const now = Date.now();
+            if (dismissedUntil > now) return false;
+            const isMobile = window.matchMedia && window.matchMedia('(max-width: 1024px)').matches;
+            if (!isMobile && !isIOS() && !isAndroid()) return false;
+            return true;
+        }
+
+        function showBanner() {
+            if (!banner || !canShowBanner()) return;
+            banner.hidden = false;
+        }
+
+        function hideBanner() {
+            if (banner) banner.hidden = true;
+        }
+
+        function openModal(modal) {
+            if (!modal) return;
+            modal.hidden = false;
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModals() {
+            modals.forEach(m => { if (m) m.hidden = true; });
+            document.body.style.overflow = '';
+        }
+
+        function rememberDismiss(days) {
+            const d = days || 7;
+            dismissedUntil = Date.now() + d * 24 * 60 * 60 * 1000;
+            try { localStorage.setItem('pwa-install-dismissed', String(dismissedUntil)); } catch (e) {}
+        }
+
+        function restoreDismiss() {
+            try {
+                const v = localStorage.getItem('pwa-install-dismissed');
+                if (v) dismissedUntil = parseInt(v, 10) || 0;
+            } catch (e) { dismissedUntil = 0; }
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch((err) => {
+                    console.warn('PWA: échec de l\'enregistrement du Service Worker', err);
+                });
+            });
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (canShowBanner()) {
+                showBanner();
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredPrompt = null;
+            hideBanner();
+            closeModals();
+            try { localStorage.removeItem('pwa-install-dismissed'); } catch (e) {}
+        });
+
+        if (btnInstall) {
+            btnInstall.addEventListener('click', async () => {
+                hideBanner();
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    try { await deferredPrompt.userChoice; } catch (e) {}
+                    deferredPrompt = null;
+                    return;
+                }
+                if (isIOS()) {
+                    openModal(modalIOS);
+                } else if (isAndroid()) {
+                    openModal(modalAndroid);
+                } else {
+                    openModal(modalAndroid);
+                }
+            });
+        }
+
+        if (btnCloseBanner) {
+            btnCloseBanner.addEventListener('click', () => {
+                hideBanner();
+                rememberDismiss(7);
+            });
+        }
+
+        modals.forEach(m => {
+            if (!m) return;
+            m.querySelectorAll('[data-close]').forEach(el => {
+                el.addEventListener('click', closeModals);
+            });
+            m.addEventListener('click', (e) => {
+                if (e.target === m) closeModals();
+            });
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModals();
+        });
+
+        restoreDismiss();
+        setTimeout(() => {
+            if (isStandalone()) return;
+            if (isIOS() && isSafari()) {
+                if (canShowBanner()) {
+                    showBanner();
+                }
+            } else if (!deferredPrompt) {
+                if (canShowBanner()) {
+                    showBanner();
+                }
+            }
+        }, 1200);
+
+        if (window.matchMedia) {
+            const mqStandalone = window.matchMedia('(display-mode: standalone)');
+            const handler = (e) => {
+                if (e.matches || isStandalone()) {
+                    hideBanner();
+                    closeModals();
+                }
+            };
+            if (mqStandalone.addEventListener) mqStandalone.addEventListener('change', handler);
+            else if (mqStandalone.addListener) mqStandalone.addListener(handler);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', initPWA);
 })();

@@ -45,6 +45,15 @@ $icones = [
     <title><?= e($titre) ?> · <?= e($appName ?? 'Gestion des litiges') ?></title>
     <link rel="stylesheet" href="<?= asset('css/app.css') ?>">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+    <link rel="manifest" href="<?= url('manifest.json') ?>">
+    <meta name="theme-color" content="#0f7bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Locavente Litiges">
+    <link rel="apple-touch-icon" href="<?= url('assets/icons/apple-touch-icon.svg') ?>">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Locavente Litiges">
+    <meta name="format-detection" content="telephone=no">
 </head>
 <body>
 <div class="app">
@@ -174,6 +183,66 @@ $icones = [
         </div>
     </div>
 </div>
+
+<div id="pwa-install-banner" class="pwa-install-banner" hidden>
+    <div class="pwa-install-content">
+        <div class="pwa-install-icon">📲</div>
+        <div class="pwa-install-text">
+            <strong>Installer l'application</strong>
+            <span>Accédez-y plus vite depuis votre écran d'accueil.</span>
+        </div>
+        <button type="button" class="pwa-install-btn" id="pwa-install-btn">Installer</button>
+        <button type="button" class="pwa-install-close" id="pwa-install-close" aria-label="Fermer">✕</button>
+    </div>
+</div>
+
+<div id="pwa-ios-guide" class="pwa-modal" hidden>
+    <div class="pwa-modal-backdrop" data-close></div>
+    <div class="pwa-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pwa-ios-title">
+        <div class="pwa-modal-header">
+            <h3 id="pwa-ios-title">Installer sur iOS (Safari)</h3>
+            <button type="button" class="pwa-modal-close" data-close aria-label="Fermer">✕</button>
+        </div>
+        <div class="pwa-modal-body">
+            <ol class="pwa-guide-list">
+                <li>
+                    <div class="pwa-guide-step">1</div>
+                    <div>Appuyez sur l'icône <strong>Partager</strong> <span class="pwa-share-icon">⎙</span> dans la barre Safari (en bas ou en haut selon votre appareil).</div>
+                </li>
+                <li>
+                    <div class="pwa-guide-step">2</div>
+                    <div>Faites défiler et sélectionnez <strong>Sur l'écran d'accueil</strong> (Ajouter à l'écran d'accueil).</div>
+                </li>
+                <li>
+                    <div class="pwa-guide-step">3</div>
+                    <div>Validez le nom, puis appuyez sur <strong>Ajouter</strong>. L'icône apparaîtra sur votre écran d'accueil.</div>
+                </li>
+            </ol>
+            <p class="petit texte-doux">Astuce : ouvrez ensuite l'application directement depuis cet icône pour qu'elle s'exécute en plein écran.</p>
+        </div>
+        <div class="pwa-modal-footer">
+            <button type="button" class="btn btn-secondaire" data-close>Compris</button>
+        </div>
+    </div>
+</div>
+
+<div id="pwa-android-guide" class="pwa-modal" hidden>
+    <div class="pwa-modal-backdrop" data-close></div>
+    <div class="pwa-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="pwa-android-title">
+        <div class="pwa-modal-header">
+            <h3 id="pwa-android-title">Installer l'application</h3>
+            <button type="button" class="pwa-modal-close" data-close aria-label="Fermer">✕</button>
+        </div>
+        <div class="pwa-modal-body">
+            <p>Votre navigateur peut proposer l'installation automatique. Sinon, utilisez le menu <strong>⋯</strong> (trois points) → <strong>Ajouter à l'écran d'accueil</strong> ou <strong>Installer l'application</strong>.</p>
+            <p class="petit texte-doux">Une fois installée, elle s'ouvrira en plein écran et fonctionnera hors ligne.</p>
+        </div>
+        <div class="pwa-modal-footer">
+            <button type="button" class="btn btn-secondaire" data-close>Fermer</button>
+        </div>
+    </div>
+</div>
+
 <script src="<?= asset('js/app.js') ?>"></script>
 </body>
 </html>
