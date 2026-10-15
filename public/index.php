@@ -164,6 +164,7 @@ $router->post('/agences/{id}/supprimer', [AgenceController::class, 'destroy'], '
 // Parametres (admin)
 $router->get('/parametres', [SettingController::class, 'parametres'], 'admin');
 $router->post('/parametres', [SettingController::class, 'updateParametres'], 'admin');
+$router->post('/parametres/ia-test', [SettingController::class, 'testerIa'], 'admin');
 $router->get('/parametres/statuts', [SettingController::class, 'statuts'], 'admin');
 $router->post('/parametres/statuts', [SettingController::class, 'storeStatut'], 'admin');
 $router->post('/parametres/statuts/{id}', [SettingController::class, 'updateStatut'], 'admin');

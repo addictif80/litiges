@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services\Api;
 
+use App\Core\Audit;
 use App\Core\Config;
 use App\Core\Settings;
 use App\Services\HttpClient;
@@ -33,6 +34,22 @@ class OneMinAiService
     private function timeout(): int
     {
         return (int) Config::get('apis.oneminai.timeout', 120);
+    }
+
+    /**
+     * Certains modeles (OpenAI raisonnement GPT-5/GPT-6/o*, DeepSeek, Z.AI/GLM)
+     * rejettent temperature/top_p/... avec une erreur 400 au lieu de les ignorer.
+     * Voir la doc 1min.ai « Supported request fields ».
+     */
+    private function modeleSansEchantillonnage(): bool
+    {
+        return (bool) preg_match('/^(gpt-5|gpt-6|o[1-9]|deepseek|glm)/', strtolower($this->model()));
+    }
+
+    /** Plafond de sortie : plus large pour les modeles de raisonnement (jetons de raisonnement inclus). */
+    private function maxTokens(): int
+    {
+        return $this->modeleSansEchantillonnage() ? 2000 : 800;
     }
 
     /**
@@ -94,15 +111,17 @@ class OneMinAiService
         $user = "Analyse ces données d'entreprise (format JSON) :\n" . json_encode($donnees, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
         $body = [
-            'model'    => $this->model(),
-            'stream'   => false,
-            'messages' => [
+            'model'       => $this->model(),
+            'stream'      => false,
+            'messages'    => [
                 ['role' => 'system', 'content' => $system],
                 ['role' => 'user',   'content' => $user],
             ],
-            'temperature' => 0.2,
-            'max_tokens'  => 800,
+            'max_tokens'  => $this->maxTokens(),
         ];
+        if (!$this->modeleSansEchantillonnage()) {
+            $body['temperature'] = 0.2;
+        }
 
         $response = HttpClient::post(self::ENDPOINT, $body, [
             'Authorization' => 'Bearer ' . $this->apiKey(),
@@ -110,24 +129,29 @@ class OneMinAiService
         ], $this->timeout());
 
         if ($response['error'] !== null || $response['status'] < 200 || $response['status'] >= 300) {
+            $detail = $this->erreurLisible($response);
+            $this->journaliserErreur($response, $detail);
+
             return [
                 'confiance'        => false,
                 'score'            => 0,
                 'decision'         => 'erreur',
-                'raison'           => 'Erreur lors de l\'analyse IA.',
+                'raison'           => $detail,
                 'risques'          => [],
                 'recommandations'   => [],
-                'analyse'          => mb_substr((string) ($response['body'] ?? ''), 0, 300),
+                'analyse'          => '',
             ];
         }
 
         $content = $response['json']['choices'][0]['message']['content'] ?? null;
         if (!is_string($content) || trim($content) === '') {
+            $this->journaliserErreur($response, 'Reponse IA vide.');
+
             return [
                 'confiance'        => false,
                 'score'            => 0,
                 'decision'         => 'erreur',
-                'raison'           => 'Réponse IA vide.',
+                'raison'           => 'Reponse IA vide (modele « ' . $this->model() . ' » ; essayez d\'augmenter la limite de jetons ou changez de modele).',
                 'risques'          => [],
                 'recommandations'   => [],
                 'analyse'          => '',
@@ -165,5 +189,134 @@ class OneMinAiService
             'analyse'          => (string) ($decoded['analyse'] ?? ''),
             'raw'              => $decoded,
         ];
+    }
+
+    /**
+     * Teste la configuration : valide la cle API (GET /openai/v1/models) et
+     * verifie que le modele choisi figure dans la liste des modeles accessibles.
+     *
+     * @return array{ok:bool,message:string,modeles:array<int,string>}
+     */
+    public function tester(?string $modele = null, ?string $cle = null): array
+    {
+        $cle    = ($cle !== null && $cle !== '') ? $cle : $this->apiKey();
+        $modele = ($modele !== null && $modele !== '') ? $modele : $this->model();
+
+        if ($cle === '') {
+            return ['ok' => false, 'message' => 'Aucune cle API 1min.ai renseignee.', 'modeles' => []];
+        }
+
+        $response = HttpClient::get('https://api.1min.ai/openai/v1/models', [
+            'Authorization' => 'Bearer ' . $cle,
+        ], $this->timeout());
+
+        if ($response['error'] !== null || $response['status'] < 200 || $response['status'] >= 300) {
+            return ['ok' => false, 'message' => $this->erreurLisible($response), 'modeles' => []];
+        }
+
+        $ids = [];
+        foreach ((array) ($response['json']['data'] ?? []) as $m) {
+            if (is_array($m) && isset($m['id'])) {
+                $ids[] = (string) $m['id'];
+            }
+        }
+        sort($ids);
+
+        if ($ids !== [] && !in_array($modele, $ids, true)) {
+            return [
+                'ok'      => false,
+                'message' => "Cle API valide, mais le modele « {$modele} » n'est pas accessible. Choisissez un identifiant de la liste.",
+                'modeles' => $ids,
+            ];
+        }
+
+        $message = 'Cle API valide';
+        if ($ids !== []) {
+            $message .= ' (' . count($ids) . ' modeles accessibles)';
+        }
+        $message .= " ; modele « {$modele} » disponible.";
+
+        return ['ok' => true, 'message' => $message, 'modeles' => $ids];
+    }
+
+    /**
+     * Construit un message d'erreur lisible a partir de la reponse HTTP de 1min.ai
+     * (l'API renvoie { "error": { "message": ..., "code": ... } }).
+     *
+     * @param array{status:int,body:string,error:?string,json:mixed} $response
+     */
+    private function erreurLisible(array $response): string
+    {
+        $status  = (int) ($response['status'] ?? 0);
+        $message = '';
+
+        $json = $response['json'] ?? null;
+        if (is_array($json)) {
+            $message = (string) ($json['error']['message'] ?? $json['message'] ?? '');
+            if ($message === '' && isset($json['error']) && is_string($json['error'])) {
+                $message = $json['error'];
+            }
+        }
+        if ($message === '' && is_string($response['body'] ?? null)) {
+            $message = trim((string) $response['body']);
+        }
+        if ($message === '' && !empty($response['error'])) {
+            $message = (string) $response['error'];
+        }
+
+        $message = trim((string) preg_replace('/\s+/', ' ', strip_tags($message)));
+        if (mb_strlen($message) > 240) {
+            $message = mb_substr($message, 0, 240) . '…';
+        }
+
+        if ($status > 0) {
+            $prefixe = 'HTTP ' . $status . ' — ';
+        } elseif (!empty($response['error'])) {
+            $prefixe = 'Connexion — ';
+        } else {
+            $prefixe = '';
+        }
+
+        return $prefixe . ($message !== '' ? $message : 'reponse vide du service');
+    }
+
+    /**
+     * Journalise l'echec (audit + fichier storage/logs/ia.log) sans jamais faire
+     * echouer l'action metier.
+     *
+     * @param array{status:int,body:string,error:?string,json:mixed} $response
+     */
+    private function journaliserErreur(array $response, string $detail): void
+    {
+        try {
+            Audit::log('ia_analyse_erreur', 'client', null, [
+                'modele' => $this->model(),
+                'status' => (int) ($response['status'] ?? 0),
+                'detail' => mb_substr($detail, 0, 300),
+            ]);
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        try {
+            $dir = APP_ROOT . '/storage/logs';
+            if (is_dir($dir)) {
+                $ligne = [
+                    'date'   => date('c'),
+                    'modele' => $this->model(),
+                    'status' => (int) ($response['status'] ?? 0),
+                    'error'  => $response['error'] ?? null,
+                    'detail' => $detail,
+                    'body'   => mb_substr((string) ($response['body'] ?? ''), 0, 2000),
+                ];
+                @file_put_contents(
+                    $dir . '/ia.log',
+                    json_encode($ligne, JSON_UNESCAPED_UNICODE) . "\n",
+                    FILE_APPEND
+                );
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 }

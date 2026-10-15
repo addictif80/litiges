@@ -8,6 +8,7 @@ use App\Core\Database;
 use App\Core\Settings;
 use App\Core\Validator;
 use App\Models\LitigeStatut;
+use App\Services\Api\OneMinAiService;
 
 class SettingController extends Controller
 {
@@ -161,6 +162,27 @@ class SettingController extends Controller
 
         flash('success', 'Parametres enregistres.');
         $this->redirect('/parametres');
+    }
+
+    /** Teste la connexion a l'IA 1min.ai (cle API + modele). */
+    public function testerIa(): void
+    {
+        // Priorite aux valeurs saisies dans le formulaire, pas encore enregistrees.
+        $modele = trim((string) $this->post('oneminai_model', ''));
+        $cle    = trim((string) $this->post('oneminai_api_key', ''));
+        if ($cle !== '' && str_starts_with($cle, '••••')) {
+            $cle = '';
+        }
+
+        $resultat = (new OneMinAiService())->tester($modele !== '' ? $modele : null, $cle !== '' ? $cle : null);
+
+        Audit::log('ia_test_connexion', 'settings', null, [
+            'ok'      => $resultat['ok'],
+            'message' => mb_substr($resultat['message'], 0, 300),
+        ]);
+
+        flash($resultat['ok'] ? 'success' : 'error', 'Test IA — ' . e($resultat['message']));
+        $this->redirect('/parametres#ia');
     }
 
     // ------------------------------------------------------------------

@@ -370,6 +370,17 @@ L'analyse est **facultative** : elle nécessite une clé API saisie dans **Param
 Intelligence artificielle** (ou `apis.oneminai.api_key`). La clé reste **côté serveur** et n'est
 jamais exposée au navigateur. Sans clé, la fonctionnalité reste simplement désactivée.
 
+Le **modèle** se choisit dans le même écran (champ `oneminai_model`, suggéré par une liste). Il
+s'agit d'un identifiant exact de l'API compatible OpenAI de 1min.ai — la liste de référence est
+fournie par **`GET https://api.1min.ai/openai/v1/models`**. Les modèles de raisonnement
+(GPT‑5/GPT‑6, `o3`, DeepSeek, GLM) **refusent** `temperature` ; le service l'omet automatiquement
+pour eux.
+
+Le bouton **Tester la connexion** valide la clé (sans lancer de génération) et vérifie que le
+modèle est accessible. En cas d'échec, le message d'erreur réel renvoyé par 1min.ai (statut HTTP +
+message) s'affiche et est journalisé dans `storage/logs/ia.log` (et dans l'audit :
+`ia_analyse_erreur` / `ia_test_connexion`).
+
 ---
 
 ## Accès en lecture seule (agences)
@@ -488,6 +499,8 @@ Après une mise à jour du code, pensez à vider le cache de l'OPcache si vous l
 | Le cron ne fait rien | Vérifiez le chemin absolu de PHP et du script ; testez avec `--dry-run`. |
 | Pas d'emails | Renseignez les paramètres SMTP et cochez « Envoyer les notifications par email ». |
 | Données entreprise vides | Vérifiez la connexion sortante HTTPS ; les sources de l'État et le BODACC sont gratuites et sans clé (Pappers est optionnel). |
+| « L'analyse IA a échoué » | Cliquez sur **Tester la connexion** dans *Paramètres → Intelligence artificielle* : le message exact (clé invalide, modèle inconnu, quota, réseau) s'affiche. Détails : `storage/logs/ia.log` et le journal d'audit. |
+| Erreur IA « HTTP 400 » sur un modèle récent | Modèle de raisonnement (GPT‑5/6, o3, DeepSeek, GLM) : la limite de jetons est élargie automatiquement ; vérifiez surtout que l'identifiant du modèle est exact. |
 | URL d'assets incorrecte | Ajustez `app.url` (sans slash final) dans `config.php`. |
 
 ---

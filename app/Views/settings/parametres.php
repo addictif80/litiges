@@ -85,7 +85,7 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
         </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ia">
         <div class="card-entete"><h3>🧠 Intelligence artificielle (1min.ai)</h3></div>
         <div class="card-corps">
             <label class="check mb-2"><input type="checkbox" name="oneminai_enabled" value="1" <?= (int) $s('oneminai_enabled', 0) === 1 ? 'checked' : '' ?>> Activer l'analyse de confiance via 1min.ai</label>
@@ -97,8 +97,89 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
                 </div>
                 <div class="form-groupe">
                     <label for="oneminai_model">Modèle</label>
-                    <input type="text" id="oneminai_model" name="oneminai_model" value="<?= e($s('oneminai_model', 'gpt-4o-mini')) ?>">
+                    <input type="text" id="oneminai_model" name="oneminai_model" list="oneminai_modeles" value="<?= e($s('oneminai_model', 'gpt-4o-mini')) ?>" autocomplete="off">
+                    <div class="aide">Identifiant exact du modèle (ex. <code>gpt-4o-mini</code>). La liste est indicative : voir <code>GET /openai/v1/models</code>. Les modèles de raisonnement (GPT‑5/6, o3, DeepSeek, GLM) n'acceptent pas <code>temperature</code> (géré automatiquement).</div>
+                    <datalist id="oneminai_modeles">
+                        <optgroup label="OpenAI GPT-4 / GPT-3.5">
+                            <option value="gpt-4.1"></option>
+                            <option value="gpt-4.1-mini"></option>
+                            <option value="gpt-4.1-nano"></option>
+                            <option value="gpt-4o"></option>
+                            <option value="gpt-4o-mini"></option>
+                            <option value="gpt-4-turbo"></option>
+                            <option value="gpt-3.5-turbo"></option>
+                        </optgroup>
+                        <optgroup label="OpenAI GPT-5 / GPT-6 / o3">
+                            <option value="gpt-5"></option>
+                            <option value="gpt-5-mini"></option>
+                            <option value="gpt-5-nano"></option>
+                            <option value="gpt-5.1"></option>
+                            <option value="gpt-5.2"></option>
+                            <option value="gpt-5.4"></option>
+                            <option value="gpt-5.4-mini"></option>
+                            <option value="gpt-5.4-nano"></option>
+                            <option value="gpt-5.5"></option>
+                            <option value="gpt-5.6-luna"></option>
+                            <option value="gpt-5.6-terra"></option>
+                            <option value="gpt-5.6-sol"></option>
+                            <option value="gpt-6-astra"></option>
+                            <option value="gpt-6-sol"></option>
+                            <option value="gpt-6-luna"></option>
+                            <option value="o3"></option>
+                            <option value="o3-mini"></option>
+                        </optgroup>
+                        <optgroup label="DeepSeek">
+                            <option value="deepseek-flash"></option>
+                            <option value="deepseek-v4-pro"></option>
+                        </optgroup>
+                        <optgroup label="Alibaba / Qwen">
+                            <option value="qwen-flash"></option>
+                            <option value="qwen-plus"></option>
+                            <option value="qwen-max"></option>
+                            <option value="qwen-vl-plus"></option>
+                            <option value="qwen-vl-max"></option>
+                            <option value="qwen3-max"></option>
+                            <option value="qwen3-8b"></option>
+                            <option value="qwen3-vl-flash"></option>
+                            <option value="qwen3-vl-plus"></option>
+                            <option value="qwen3.6-flash"></option>
+                            <option value="qwen3.6-max-preview"></option>
+                            <option value="qwen3.6-plus"></option>
+                            <option value="qwen3.7-flash"></option>
+                            <option value="qwen3.7-max"></option>
+                            <option value="qwen3.7-plus"></option>
+                        </optgroup>
+                        <optgroup label="Z.AI / GLM">
+                            <option value="glm-5"></option>
+                            <option value="glm-5.1"></option>
+                            <option value="glm-5.2"></option>
+                            <option value="glm-5.3"></option>
+                        </optgroup>
+                        <optgroup label="Mistral">
+                            <option value="magistral-medium-latest"></option>
+                            <option value="magistral-small-latest"></option>
+                            <option value="ministral-14b-latest"></option>
+                            <option value="mistral-large-2512"></option>
+                            <option value="mistral-large-latest"></option>
+                            <option value="mistral-medium-3-5"></option>
+                            <option value="mistral-medium-latest"></option>
+                            <option value="mistral-small-2603"></option>
+                            <option value="mistral-small-latest"></option>
+                            <option value="open-mistral-nemo"></option>
+                        </optgroup>
+                        <optgroup label="OpenRouter — Kimi / Muse Spark">
+                            <option value="moonshotai/kimi-k2.6"></option>
+                            <option value="moonshotai/kimi-k2.7-code"></option>
+                            <option value="meta/muse-spark-1.1"></option>
+                            <option value="meta/muse-spark-1.2"></option>
+                            <option value="meta/muse-spark-1.3"></option>
+                        </optgroup>
+                    </datalist>
                 </div>
+            </div>
+            <div class="flex mt-1">
+                <button type="submit" class="btn btn-secondaire" formaction="<?= url('/parametres/ia-test') ?>" formmethod="post">Tester la connexion</button>
+                <span class="aide" style="margin:0">Valide la clé API et vérifie que le modèle est accessible (sans lancer d'analyse).</span>
             </div>
         </div>
     </div>

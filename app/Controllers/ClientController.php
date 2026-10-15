@@ -224,7 +224,7 @@ class ClientController extends Controller
         $resultat = $service->analyserConfiance($client, $encours);
 
         if (($resultat['decision'] ?? '') === 'erreur') {
-            flash('error', "L'analyse IA a echoue : " . ($resultat['raison'] ?? 'erreur inconnue'));
+            flash('error', "L'analyse IA a echoue : " . e($resultat['raison'] ?? 'erreur inconnue'));
             $this->redirect('/clients/' . $id);
         }
 
