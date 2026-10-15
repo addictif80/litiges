@@ -1,5 +1,7 @@
 /config/config.php
 /storage/logs/*.log
+/storage/logs/*.json
+/storage/migrations.state
 /storage/uploads/*
 !/storage/uploads/.gitkeep
 /vendor/

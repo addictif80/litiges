@@ -2,9 +2,15 @@
 --  Migration - Roles/permissions, messagerie, notes client, partage par
 --  lien et analyse IA (1min.ai).
 --
---  A executer UNE FOIS sur une installation existante, avec un client
---  MySQL/MariaDB (mysql, phpMyAdmin...). Le fichier est idempotent :
---  il peut etre relance sans erreur.
+--  Cette migration est appliquee AUTOMATIQUEMENT au chargement des pages
+--  par app/Core/Migrator.php (aucune action necessaire apres un git pull).
+--  Elle peut aussi etre lancee manuellement depuis l'administration
+--  (Administration > Base de donnees > Appliquer maintenant).
+--
+--  IMPORTANT : ce script n'utilise NI procedures stockees NI commande
+--  DELIMITER. Il est donc compatible phpMyAdmin et ne necessite pas le
+--  privilege CREATE ROUTINE (souvent absent en mutualise). Il est
+--  idempotent : il peut etre relance sans erreur.
 --
 --  Pour une installation neuve, database/schema.sql suffit.
 -- =====================================================================
@@ -12,7 +18,7 @@
 SET NAMES utf8mb4;
 
 -- ---------------------------------------------------------------------
--- 1. Ajout du role "consultant"
+-- 1. Role "consultant"
 -- ---------------------------------------------------------------------
 ALTER TABLE users
     MODIFY COLUMN role ENUM('admin','gestionnaire','consultant','lecteur') NOT NULL DEFAULT 'gestionnaire';
@@ -22,53 +28,79 @@ ALTER TABLE partages
     MODIFY COLUMN scope ENUM('global','agence','client','litige') NOT NULL DEFAULT 'agence';
 
 -- ---------------------------------------------------------------------
--- 2. Colonnes ajoutees (fichier clients + jeton de partage)
---    Via une procedure pour rester idempotent (MySQL 8 et MariaDB).
+-- 2. Colonnes ajoutees (idempotent, sans procedure stockee)
+--    La commande ALTER n'est executee que si la colonne est absente.
 -- ---------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS _litiges_add_col;
 
-DELIMITER $$
-CREATE PROCEDURE _litiges_add_col(IN tbl VARCHAR(64), IN col VARCHAR(64), IN def TEXT)
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col
-    ) THEN
-        SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN `', col, '` ', def);
-        PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
-    END IF;
-END$$
-DELIMITER ;
+-- clients.ia_score
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients' AND COLUMN_NAME = 'ia_score') = 0,
+    'ALTER TABLE `clients` ADD COLUMN `ia_score` TINYINT DEFAULT NULL AFTER `score_solvabilite`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
-CALL _litiges_add_col('clients',  'ia_score',     'TINYINT DEFAULT NULL AFTER `score_solvabilite`');
-CALL _litiges_add_col('clients',  'ia_decision',  'VARCHAR(30) DEFAULT NULL AFTER `ia_score`');
-CALL _litiges_add_col('clients',  'ia_analyse',   'LONGTEXT DEFAULT NULL AFTER `ia_decision`');
-CALL _litiges_add_col('clients',  'ia_synced_at', 'DATETIME DEFAULT NULL AFTER `ia_analyse`');
-CALL _litiges_add_col('partages', 'token',        'VARCHAR(64) DEFAULT NULL AFTER `code`');
+-- clients.ia_decision
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients' AND COLUMN_NAME = 'ia_decision') = 0,
+    'ALTER TABLE `clients` ADD COLUMN `ia_decision` VARCHAR(30) DEFAULT NULL AFTER `ia_score`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
--- Lien cible des notifications (client, litige, message...).
-CALL _litiges_add_col('notifications', 'lien', 'VARCHAR(255) DEFAULT NULL AFTER `message`');
+-- clients.ia_analyse
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients' AND COLUMN_NAME = 'ia_analyse') = 0,
+    'ALTER TABLE `clients` ADD COLUMN `ia_analyse` LONGTEXT DEFAULT NULL AFTER `ia_decision`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
-DROP PROCEDURE IF EXISTS _litiges_add_col;
+-- clients.ia_synced_at
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients' AND COLUMN_NAME = 'ia_synced_at') = 0,
+    'ALTER TABLE `clients` ADD COLUMN `ia_synced_at` DATETIME DEFAULT NULL AFTER `ia_analyse`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
--- Index unique sur le jeton de partage (ignore si deja present).
-DROP PROCEDURE IF EXISTS _litiges_add_idx;
-DELIMITER $$
-CREATE PROCEDURE _litiges_add_idx(IN tbl VARCHAR(64), IN idx VARCHAR(64), IN def TEXT)
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.STATISTICS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND INDEX_NAME = idx
-    ) THEN
-        SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD ', def);
-        PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
-    END IF;
-END$$
-DELIMITER ;
+-- partages.token
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'partages' AND COLUMN_NAME = 'token') = 0,
+    'ALTER TABLE `partages` ADD COLUMN `token` VARCHAR(64) DEFAULT NULL AFTER `code`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
-CALL _litiges_add_idx('partages', 'uk_partages_token', 'UNIQUE KEY `uk_partages_token` (`token`)');
+-- notifications.lien (cible du clic : client, litige, message...)
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'notifications' AND COLUMN_NAME = 'lien') = 0,
+    'ALTER TABLE `notifications` ADD COLUMN `lien` VARCHAR(255) DEFAULT NULL AFTER `message`',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
-DROP PROCEDURE IF EXISTS _litiges_add_idx;
+-- Index unique sur le jeton de partage (ajoute seulement s'il manque).
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'partages' AND INDEX_NAME = 'uk_partages_token') = 0,
+    'ALTER TABLE `partages` ADD UNIQUE KEY `uk_partages_token` (`token`)',
+    'SET @_litiges_noop = 1');
+PREPARE _litiges_stmt FROM @sql;
+EXECUTE _litiges_stmt;
+DEALLOCATE PREPARE _litiges_stmt;
 
 -- ---------------------------------------------------------------------
 -- 3. Nouvelles tables

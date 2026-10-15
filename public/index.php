@@ -26,6 +26,7 @@ use App\Controllers\DashboardController;
 use App\Controllers\DocumentController;
 use App\Controllers\InspectionController;
 use App\Controllers\LitigeController;
+use App\Controllers\MigrationController;
 use App\Controllers\NoteController;
 use App\Controllers\NotificationController;
 use App\Controllers\PartageController;
@@ -167,6 +168,10 @@ $router->get('/parametres/statuts', [SettingController::class, 'statuts'], 'admi
 $router->post('/parametres/statuts', [SettingController::class, 'storeStatut'], 'admin');
 $router->post('/parametres/statuts/{id}', [SettingController::class, 'updateStatut'], 'admin');
 $router->post('/parametres/statuts/{id}/supprimer', [SettingController::class, 'destroyStatut'], 'admin');
+
+// Base de donnees / migrations (admin)
+$router->get('/parametres/migrations', [MigrationController::class, 'index'], 'admin');
+$router->post('/parametres/migrations', [MigrationController::class, 'run'], 'admin');
 
 // Journal d'audit (admin)
 $router->get('/audit', [AuditController::class, 'index'], 'admin');

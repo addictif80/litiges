@@ -92,12 +92,31 @@ class Chat extends Model
     public function membres(int $chatId): array
     {
         return Database::fetchAll(
-            'SELECT cm.*, u.full_name, u.username
+            'SELECT cm.*, u.full_name, u.username, a.nom AS agence_nom
              FROM chat_membres cm
              JOIN users u ON u.id = cm.user_id
+             LEFT JOIN agences a ON a.id = u.agence_id
              WHERE cm.chat_id = :c
              ORDER BY u.full_name ASC, u.username ASC',
             ['c' => $chatId]
+        );
+    }
+
+    /**
+     * L'autre participant d'une discussion 1-a-1 (nom + agence).
+     *
+     * @return array<string,mixed>|null
+     */
+    public function autreMembre(int $chatId, int $userId): ?array
+    {
+        return Database::fetch(
+            'SELECT u.full_name, u.username, a.nom AS agence_nom
+             FROM chat_membres cm
+             JOIN users u ON u.id = cm.user_id
+             LEFT JOIN agences a ON a.id = u.agence_id
+             WHERE cm.chat_id = :c AND cm.user_id <> :u
+             LIMIT 1',
+            ['c' => $chatId, 'u' => $userId]
         );
     }
 

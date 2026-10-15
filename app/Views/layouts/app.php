@@ -120,6 +120,9 @@ $icones = [
                 <a href="<?= url('/parametres') ?>" class="<?= $currentPath === '/parametres' ? 'is-active' : '' ?>">
                     <span class="ic"><?= $icones['parametres'] ?></span> Paramètres
                 </a>
+                <a href="<?= url('/parametres/migrations') ?>" class="<?= is_active_menu('/parametres/migrations') ?>">
+                    <span class="ic">🗄️</span> Base de données
+                </a>
                 <a href="<?= url('/audit') ?>" class="<?= is_active_menu('/audit') ?>">
                     <span class="ic"><?= $icones['audit'] ?></span> Journal d'audit
                 </a>

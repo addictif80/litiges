@@ -228,7 +228,13 @@
                             const div = document.createElement('div');
                             div.className = 'message' + ((msg.user_id === authId) ? ' mine' : '');
                             div.setAttribute('data-id', msg.id);
-                            div.innerHTML = '<div class="message-entete"><strong>' + escapeHtml(msg.auteur) + '</strong><span>' + escapeHtml(msg.quand) + '</span></div><div class="message-corps">' + escapeHtml(msg.contenu) + '</div>';
+                            const agence = msg.agence
+                                ? ' <span class="message-agence">(' + escapeHtml(msg.agence) + ')</span>'
+                                : '';
+                            div.innerHTML = '<div class="message-entete">'
+                                + '<span class="message-auteur"><strong>' + escapeHtml(msg.auteur) + '</strong>' + agence + '</span>'
+                                + '<span class="message-quand">' + escapeHtml(msg.quand) + '</span>'
+                                + '</div><div class="message-corps">' + escapeHtml(msg.contenu) + '</div>';
                             conteneur.insertBefore(div, document.getElementById('bas'));
                             if (msg.id > dernierId) {
                                 dernierId = msg.id;

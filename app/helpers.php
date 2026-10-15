@@ -169,6 +169,23 @@ if (!function_exists('initials')) {
     }
 }
 
+if (!function_exists('nom_utilisateur')) {
+    /**
+     * Nom d'affichage d'un utilisateur (accepte full_name, user_nom ou username).
+     * Ne renvoie jamais de valeur vide.
+     */
+    function nom_utilisateur(?array $u): string
+    {
+        foreach (['full_name', 'user_nom', 'username'] as $cle) {
+            $valeur = trim((string) ($u[$cle] ?? ''));
+            if ($valeur !== '') {
+                return $valeur;
+            }
+        }
+        return 'Inconnu';
+    }
+}
+
 if (!function_exists('normalize_phone')) {
     /** Nettoie un numero pour permettre les liens tel:. */
     function normalize_phone(?string $phone): string

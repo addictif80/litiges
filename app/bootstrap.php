@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 use App\Core\Config;
 use App\Core\Database;
+use App\Core\Migrator;
 use App\Core\Session;
 use App\Core\View;
 use App\Core\Settings;
@@ -88,3 +89,10 @@ foreach (['storage', 'storage/uploads', 'storage/logs'] as $dir) {
 
 // --- Session ----------------------------------------------------------
 Session::start();
+
+// --- Migrations automatiques -----------------------------------------
+// Met la base a jour au chargement de la page, apres la session (l'audit
+// de la migration rattache alors correctement l'utilisateur). Ne bloque
+// jamais l'app : une erreur est ecrite dans storage/logs/migrations.log et
+// visible dans l'administration (Administration > Base de donnees).
+Migrator::autoRun();

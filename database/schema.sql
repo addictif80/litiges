@@ -404,6 +404,18 @@ CREATE TABLE IF NOT EXISTS settings (
     PRIMARY KEY (cle)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------------------------------------------------------------------
+-- Migrations deja appliquees (suivi automatique, voir app/Core/Migrator.php)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS migrations (
+    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    migration  VARCHAR(255) NOT NULL,
+    checksum   CHAR(32)     DEFAULT NULL,
+    applied_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_migrations_migration (migration)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =====================================================================

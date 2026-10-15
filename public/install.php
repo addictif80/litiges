@@ -76,6 +76,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dejaInstalle) {
             $sql = (string) file_get_contents($schemaFile);
             executerSchema($pdo, $sql);
 
+            // Marque les migrations fournies comme deja appliquees : le schema
+            // ci-dessus represente deja l'etat courant, inutile de les rejouer.
+            foreach (glob($root . '/database/migrations/*.sql') ?: [] as $fichierMigration) {
+                $contenuMigration = (string) file_get_contents($fichierMigration);
+                $pdo->prepare('INSERT INTO migrations (migration, checksum) VALUES (:m, :c)
+                               ON DUPLICATE KEY UPDATE checksum = VALUES(checksum)')
+                    ->execute(['m' => basename($fichierMigration), 'c' => md5($contenuMigration)]);
+            }
+
             // Creation de l'administrateur
             $hash = password_hash($adminPass, PASSWORD_BCRYPT);
             $stmt = $pdo->prepare('INSERT INTO users (username, email, full_name, password_hash, role, actif)

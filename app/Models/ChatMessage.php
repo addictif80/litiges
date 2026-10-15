@@ -19,9 +19,10 @@ class ChatMessage extends Model
     public function pourChat(int $chatId, int $sinceId = 0): array
     {
         return Database::fetchAll(
-            'SELECT m.*, u.full_name AS user_nom, u.username
+            'SELECT m.*, u.full_name AS user_nom, u.username, a.nom AS agence_nom
              FROM chat_messages m
              LEFT JOIN users u ON u.id = m.user_id
+             LEFT JOIN agences a ON a.id = u.agence_id
              WHERE m.chat_id = :c AND m.id > :since
              ORDER BY m.id ASC',
             ['c' => $chatId, 'since' => $sinceId]

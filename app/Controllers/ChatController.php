@@ -24,7 +24,7 @@ class ChatController extends Controller
 
         $conversations = $chats->conversations($uid, Auth::agenceId(), Auth::isAdmin());
         foreach ($conversations as &$c) {
-            $c['titre_affiche'] = $this->titre($c, $uid);
+            $c = array_merge($c, $this->presentation($c, $uid, $chats));
         }
         unset($c);
 
@@ -45,10 +45,13 @@ class ChatController extends Controller
 
         $chats->marquerLu((int) $chat['id'], $uid);
 
+        $entete = $this->presentation($chat, $uid, $chats);
+
         $this->view('chat/show', [
-            'titre'     => $this->titre($chat, $uid),
+            'titre'     => $entete['titre'],
             'chat'      => $chat,
-            'titreChat' => $this->titre($chat, $uid),
+            'entete'    => $entete,
+            'titreChat' => $entete['titre'],
             'messages'  => (new ChatMessage())->pourChat((int) $chat['id']),
             'membres'   => $chats->membres((int) $chat['id']),
             'authUser'  => Auth::user(),
@@ -159,7 +162,8 @@ class ChatController extends Controller
         $donnees = array_map(static fn (array $m): array => [
             'id'       => (int) $m['id'],
             'user_id'  => (int) ($m['user_id'] ?? 0),
-            'auteur'   => (string) ($m['user_nom'] ?: $m['username'] ?: 'Inconnu'),
+            'auteur'   => nom_utilisateur($m),
+            'agence'   => (string) ($m['agence_nom'] ?? ''),
             'contenu'  => (string) $m['contenu'],
             'quand'    => datetime_fr($m['created_at']),
         ], $messages);
@@ -178,30 +182,58 @@ class ChatController extends Controller
         return $chat;
     }
 
-    private function titre(array $chat, int $uid): string
+    /**
+     * Informations d'affichage d'une conversation : titre, agence rattachee,
+     * initiales (avatar) et libelle du type.
+     *
+     * @return array{type:string,type_libelle:string,titre:string,agence_nom:?string,initiales:string}
+     */
+    private function presentation(array $chat, int $uid, ?Chat $chats = null): array
     {
-        if (($chat['type'] ?? '') === 'agence') {
-            $nom = (string) Database::value(
+        $chats ??= new Chat();
+        $type = (string) ($chat['type'] ?? 'direct');
+
+        if ($type === 'agence') {
+            $nom = trim((string) Database::value(
                 'SELECT nom FROM agences WHERE id = :id',
                 ['id' => (int) ($chat['agence_id'] ?? 0)],
                 ''
-            );
-            return 'Canal ' . ($nom !== '' ? $nom : 'agence');
+            ));
+            return [
+                'type'         => 'agence',
+                'type_libelle' => "Canal d'agence",
+                'titre'        => 'Canal ' . ($nom !== '' ? $nom : 'agence'),
+                'agence_nom'   => $nom !== '' ? $nom : null,
+                'initiales'    => initials($nom !== '' ? $nom : 'Agence'),
+            ];
         }
 
-        if (($chat['type'] ?? '') === 'groupe') {
-            return (string) ($chat['titre'] !== null && $chat['titre'] !== '' ? $chat['titre'] : 'Groupe');
+        if ($type === 'groupe') {
+            $titre = trim((string) ($chat['titre'] ?? ''));
+            $titre = $titre !== '' ? $titre : 'Groupe';
+            return [
+                'type'         => 'groupe',
+                'type_libelle' => 'Groupe',
+                'titre'        => $titre,
+                'agence_nom'   => null,
+                'initiales'    => initials($titre),
+            ];
         }
 
-        $autre = Database::fetch(
-            'SELECT u.full_name, u.username
-             FROM chat_membres cm
-             JOIN users u ON u.id = cm.user_id
-             WHERE cm.chat_id = :c AND cm.user_id <> :u
-             LIMIT 1',
-            ['c' => (int) $chat['id'], 'u' => $uid]
-        );
+        $autre = $chats->autreMembre((int) $chat['id'], $uid);
+        $titre = $autre ? nom_utilisateur($autre) : 'Discussion';
 
-        return $autre ? (string) ($autre['full_name'] ?: $autre['username']) : 'Discussion';
+        return [
+            'type'         => 'direct',
+            'type_libelle' => 'Discussion privée',
+            'titre'        => $titre,
+            'agence_nom'   => $autre !== null && !empty($autre['agence_nom']) ? (string) $autre['agence_nom'] : null,
+            'initiales'    => initials($titre),
+        ];
+    }
+
+    private function titre(array $chat, int $uid): string
+    {
+        return $this->presentation($chat, $uid)['titre'];
     }
 }

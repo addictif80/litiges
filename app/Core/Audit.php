@@ -30,6 +30,6 @@ class Audit
         if (class_exists(Auth::class) && Auth::user()) {
             return (string) Auth::user()['username'];
         }
-        return $_SESSION['user_id'] === null ? null : (string) ($_SESSION['username'] ?? null);
+        return ($_SESSION['user_id'] ?? null) === null ? null : (string) ($_SESSION['username'] ?? null);
     }
 }

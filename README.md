@@ -22,6 +22,7 @@ reste disponible en option si une clé API est fournie.
 2. [Prérequis](#prérequis)
 3. [Installation](#installation)
 4. [Mise à jour d'une installation existante](#mise-à-jour-dune-installation-existante)
+   - [Migrations automatiques](#migrations-automatiques)
 5. [Configuration](#configuration)
 6. [Tâche planifiée (cron)](#tâche-planifiée-cron)
 7. [Sources de données entreprises](#sources-de-données-entreprises)
@@ -156,23 +157,47 @@ et crée l'administrateur.
 
 ## Mise à jour d'une installation existante
 
-Pour les installations déjà en place, une **migration** ajoute les nouvelles fonctionnalités
-(rôle *consultant*, messagerie, notes client, partage par lien, analyse IA, colonne `lien` des
-notifications) sans réinitialiser les données :
+Les évolutions de la base de données sont appliquées **automatiquement** : à chaque
+chargement de page, l'application exécute les fichiers présents dans
+`database/migrations/` qui n'ont pas encore été joués (suivi dans la table `migrations`) :
 
-1. Sauvegardez la base (voir [Sauvegarde et maintenance](#sauvegarde-et-maintenance)).
-2. Exécutez le script **`database/migrations/2026-10-14-roles-chat-notes-ia.sql`** avec un client
-   MySQL/MariaDB (`mysql`, phpMyAdmin…) :
+```bash
+git pull
+```
 
-   ```bash
-   mysql -u <utilisateur> -p <base> < database/migrations/2026-10-14-roles-chat-notes-ia.sql
-   ```
+C'est tout : aucune commande SQL à lancer. Le mécanisme est décrit plus bas
+(voir [Migrations automatiques](#migrations-automatiques)).
 
-   Le script est **idempotent** : il peut être relancé sans erreur.
-3. Déposez les fichiers mis à jour.
+> Pour forcer une reprise (droits MySQL corrigés, base restaurée, etc.), ouvrez
+> **Administration → Base de données** et cliquez sur « Appliquer maintenant ».
 
-> Pour une **installation neuve**, `database/schema.sql` contient déjà tout : la migration n'est
-> pas nécessaire.
+> Pour une **installation neuve**, `database/schema.sql` contient déjà tout : aucune
+> migration n'est nécessaire (elles sont simplement marquées comme appliquées).
+
+### Migrations automatiques
+
+Le suivi est géré par `app/Core/Migrator.php`, appelé au chargement de chaque page :
+
+1. il compare l'empreinte des fichiers de `database/migrations/` à celle mémorisée dans
+   `storage/migrations.state` ; si rien n'a changé, **aucune requête SQL** n'est faite ;
+2. sinon, il exécute les fichiers non encore enregistrés dans la table `migrations`.
+
+**Ajouter une évolution** (table, colonne, données de référence…) revient donc à déposer un
+fichier `database/migrations/AAAA-MM-JJ-description.sql` et à faire un `git pull`.
+
+Règles d'écriture :
+
+| Règle | Détail |
+|---|---|
+| Un fichier = une évolution | nommé `AAAA-MM-JJ-description.sql` ; l'ordre alphabétique fait foi. |
+| SQL simple | instructions séparées par `;`. **Pas de `DELIMITER` ni de procédures stockées.** |
+| Idempotent | la migration peut être relancée après une erreur partielle : `CREATE TABLE IF NOT EXISTS`, garde via `information_schema`, `INSERT … ON DUPLICATE KEY UPDATE`, etc. |
+| Ne jamais modifier une migration déjà appliquée | elle ne sera pas rejouée : créez-en une nouvelle. |
+| Droits MySQL | l'utilisateur doit pouvoir `CREATE` / `ALTER` / `INDEX`. |
+
+**En cas d'échec**, l'application reste disponible : l'erreur est écrite dans
+`storage/logs/migrations.log` et visible dans **Administration → Base de données**
+(bouton « Appliquer maintenant » après correction).
 
 ---
 
@@ -404,10 +429,10 @@ Chaque notification renvoie vers l'élément concerné (client, litige, conversa
 
 ```
 app/
-├── bootstrap.php            # Amorçage (autoload, config, base, session)
+├── bootstrap.php            # Amorçage (autoload, config, base, session, migrations)
 ├── helpers.php              # Fonctions utilitaires (e(), url(), money()…)
 ├── Controllers/             # Contrôleurs (une classe par domaine)
-├── Core/                    # Noyau : Router, Database, Auth, Csrf, View, Validator…
+├── Core/                    # Noyau : Router, Database, Auth, Csrf, View, Migrator…
 ├── Models/                  # Modèles (accès base de données)
 ├── Services/                # APIs entreprises, IA, uploads, emails, rappels, export
 │   └── Api/                 # Clients API Recherche d'entreprises / BODACC / Pappers / 1min.ai
@@ -423,7 +448,7 @@ cron/
 
 database/
 ├── schema.sql               # Schéma MySQL + données de référence (installation neuve)
-└── migrations/              # Scripts SQL de mise à jour (installations existantes)
+└── migrations/              # Scripts SQL appliqués automatiquement au chargement des pages
 
 public/                      # ← RACINE WEB
 ├── index.php                # Front controller (routes)
@@ -457,6 +482,8 @@ Après une mise à jour du code, pensez à vider le cache de l'OPcache si vous l
 | Symptôme | Piste |
 |---|---|
 | Page blanche / erreur 500 | Activez temporairement `app.debug = true` dans `config.php`, consultez le journal PHP. |
+| Table / colonne manquante (« Unknown table », « Unknown column ») | Migrations non appliquées : ouvrez **Administration → Base de données** et cliquez sur « Appliquer maintenant ». Détails : `storage/logs/migrations.log`. |
+| Migration bloquée | Vérifiez les droits MySQL (`CREATE`, `ALTER`, `INDEX`) et que `storage/` est inscriptible. |
 | « Configuration introuvable » | `config/config.php` absent : relancez l'installation. |
 | Le cron ne fait rien | Vérifiez le chemin absolu de PHP et du script ; testez avec `--dry-run`. |
 | Pas d'emails | Renseignez les paramètres SMTP et cochez « Envoyer les notifications par email ». |
