@@ -15,6 +15,7 @@
                     <div class="form-groupe"><label>Email</label><input type="email" name="email"></div>
                     <div class="form-groupe"><label>Adresse</label><input type="text" name="adresse"></div>
                 </div>
+                <label class="check mb-2"><input type="checkbox" name="actif" value="1" checked> Active</label>
                 <button type="submit" class="btn btn-petit">Créer</button>
             </form>
         </details>
@@ -23,7 +24,7 @@
         <div class="card-corps texte-doux">Aucune agence enregistrée.</div>
     <?php else: ?>
         <table class="tableau">
-            <thead><tr><th>Nom</th><th>Code</th><th>Ville</th><th>Cp</th><th class="num">Litiges</th><th class="num">Clôturés</th><th>État</th><th></th></tr></thead>
+            <thead><tr><th>Nom</th><th>Code</th><th>Ville</th><th>Téléphone</th><th class="num">Litiges</th><th class="num">Clôturés</th><th>État</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($agences as $a): ?>
                 <tr>
