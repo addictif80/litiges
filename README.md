@@ -77,6 +77,9 @@ reste disponible en option si une clé API est fournie.
   note sur un litige et nouveau message (ce dernier réservé aux personnes concernées).
 - **Accès lecture seule** pour les agences via un **code d'accès**, sans création de compte.
 - **API JSON interne** pour l'auto-complétion des entreprises.
+- **Présentation intégrée** : un diaporama (menu « Présentation », page `/presentation`) qui
+  décrit les fonctionnalités du panel — navigation clavier, plein écran, vue d'ensemble,
+  impression/export PDF.
 
 ---
 

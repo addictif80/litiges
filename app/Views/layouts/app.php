@@ -90,6 +90,10 @@ $icones = [
                 </a>
             <?php endif; ?>
 
+            <a href="<?= url('/presentation') ?>" class="<?= is_active_menu('/presentation') ?>">
+                <span class="ic">📽️</span> Présentation
+            </a>
+
             <?php if ($estAdmin): ?>
                 <div class="nav-section">Administration</div>
                 <a href="<?= url('/utilisateurs') ?>" class="<?= is_active_menu('/utilisateurs') ?>">

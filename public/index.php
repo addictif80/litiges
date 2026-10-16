@@ -30,6 +30,7 @@ use App\Controllers\MigrationController;
 use App\Controllers\NoteController;
 use App\Controllers\NotificationController;
 use App\Controllers\PartageController;
+use App\Controllers\PresentationController;
 use App\Controllers\ProfileController;
 use App\Controllers\RelanceController;
 use App\Controllers\SettingController;
@@ -76,6 +77,9 @@ $router->post('/reset/{token}', [AuthController::class, 'reset'], 'guest');
 
 // Tableau de bord
 $router->get('/', [DashboardController::class, 'index'], 'auth');
+
+// Presentation des fonctionnalites (diaporama)
+$router->get('/presentation', [PresentationController::class, 'index'], 'auth');
 
 // Messagerie
 $router->get('/chat', [ChatController::class, 'index'], 'module:chat');

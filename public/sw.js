@@ -1,4 +1,4 @@
-const CACHE_NAME = 'locavente-litiges-v1.0.0';
+const CACHE_NAME = 'locavente-litiges-v1.0.1';
 const OFFLINE_URL = './offline.html';
 
 const APP_SHELL = [
@@ -7,6 +7,8 @@ const APP_SHELL = [
   './manifest.json',
   './assets/css/app.css',
   './assets/js/app.js',
+  './assets/css/presentation.css',
+  './assets/js/presentation.js',
   './assets/icons/icon.svg',
   './assets/icons/maskable.svg',
   './assets/icons/apple-touch-icon.svg',
