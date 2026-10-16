@@ -33,9 +33,14 @@ abstract class Controller
     /** Revenir a la page precedente (ou a un fallback). */
     protected function back(string $fallback = '/'): never
     {
-        $referer = $_SERVER['HTTP_REFERER'] ?? '';
-        $host    = $_SERVER['HTTP_HOST'] ?? '';
-        if ($referer !== '' && ($host === '' || str_contains($referer, $host))) {
+        // On ne revient au referer que s'il pointe vraiment vers notre hote
+        // (comparaison sur l'hote analyse, pas sur une sous-chaine).
+        $referer     = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+        $hoteReferer = strtolower((string) parse_url($referer, PHP_URL_HOST));
+        $port        = parse_url($referer, PHP_URL_PORT);
+        $hoteComplet = $hoteReferer . ($port ? ':' . $port : '');
+        $hote        = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+        if ($referer !== '' && $hote !== '' && $hoteComplet === $hote) {
             header('Location: ' . $referer);
             exit;
         }
@@ -49,12 +54,12 @@ abstract class Controller
         exit;
     }
 
-    protected function notFound(string $message = 'Element introuvable.'): never
+    protected function notFound(string $message = 'Élément introuvable.'): never
     {
         $this->errorPage(404, $message);
     }
 
-    protected function forbidden(string $message = 'Action non autorisee.'): never
+    protected function forbidden(string $message = 'Action non autorisée.'): never
     {
         $this->errorPage(403, $message);
     }

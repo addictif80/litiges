@@ -20,7 +20,7 @@
                 <?= csrf_field() ?>
                 <div class="form-groupe">
                     <label for="type">Type de conversation</label>
-                    <select id="type" name="type" onchange="var v=this.value;this.form.querySelectorAll('[data-bloc]').forEach(function(b){b.hidden=(b.getAttribute('data-bloc')!==v);});">
+                    <select id="type" name="type" data-bloc-switch>
                         <option value="direct">1-à-1</option>
                         <option value="groupe">Groupe</option>
                         <?php if ($estAdmin ?? false): ?><option value="agence">Canal d'agence</option><?php endif; ?>

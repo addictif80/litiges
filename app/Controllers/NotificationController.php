@@ -11,18 +11,18 @@ class NotificationController extends Controller
     public function index(): void
     {
         $userId = (int) Auth::id();
-        $model  = new Notification();
+        $modele = new Notification();
 
         $this->view('notifications/index', [
             'titre'         => 'Notifications',
-            'notifications' => $model->forUser($userId, false, 100),
+            'notifications' => $modele->forUser($userId, false, 100),
         ]);
     }
 
     public function markAll(): void
     {
         (new Notification())->marquerLues((int) Auth::id());
-        flash('success', 'Toutes les notifications ont ete marquees comme lues.');
+        flash('success', 'Toutes les notifications ont été marquées comme lues.');
         $this->back('/notifications');
     }
 

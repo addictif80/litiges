@@ -14,6 +14,7 @@ use App\Models\Document;
 use App\Models\Litige;
 use App\Services\Api\OneMinAiService;
 use App\Services\CompanyLookupService;
+use App\Services\MentionService;
 use App\Services\NotificationService;
 
 class ClientController extends Controller
@@ -33,6 +34,20 @@ class ClientController extends Controller
             'pages'   => (int) max(1, (int) ceil($resultat['total'] / 25)),
             'q'       => $q,
         ]);
+    }
+
+    /** Autocompletion JSON pour les selecteurs de client : GET /api/clients/suggestions?q= */
+    public function suggestions(): void
+    {
+        $q = trim((string) $this->input('q', ''));
+        if (mb_strlen($q) < 2) {
+            $this->json([]);
+        }
+        $resultats = array_map(static fn (array $c): array => [
+            'id'      => (int) $c['id'],
+            'libelle' => $c['raison_sociale'] . ($c['siren'] ? ' (' . $c['siren'] . ')' : '') . ($c['ville'] ? ' — ' . $c['ville'] : ''),
+        ], (new Client())->suggerer($q, 15));
+        $this->json($resultats);
     }
 
     public function show(string $id): void
@@ -83,7 +98,7 @@ class ClientController extends Controller
         $clients   = new Client();
 
         if ($data['siren'] !== null && $clients->findBySiren($data['siren'])) {
-            $validator->custom('siren', false, 'Un client avec ce SIREN existe deja.');
+            $validator->custom('siren', false, 'Un client avec ce SIREN existe déjà.');
         }
 
         if ($validator->fails()) {
@@ -100,7 +115,7 @@ class ClientController extends Controller
             (new NotificationService())->clientCree($client, (int) Auth::id());
         }
 
-        flash('success', 'Client cree.');
+        flash('success', 'Client créé.');
         $this->redirect('/clients/' . $id);
     }
 
@@ -143,7 +158,7 @@ class ClientController extends Controller
         $clients->update((int) $id, $data);
         Audit::log('client_modification', 'client', (int) $id);
 
-        flash('success', 'Client mis a jour.');
+        flash('success', 'Client mis à jour.');
         $this->redirect('/clients/' . $id);
     }
 
@@ -161,14 +176,14 @@ class ClientController extends Controller
 
         $nbLitiges = (new Litige())->count('client_id = :c', ['c' => (int) $id]);
         if ($nbLitiges > 0) {
-            flash('error', "Impossible de supprimer : {$nbLitiges} litige(s) sont rattaches a ce client.");
+            flash('error', "Impossible de supprimer : {$nbLitiges} litige(s) sont rattachés à ce client.");
             $this->redirect('/clients/' . $id);
         }
 
         $clients->delete((int) $id);
         Audit::log('client_suppression', 'client', (int) $id, ['raison_sociale' => $client['raison_sociale']]);
 
-        flash('success', 'Client supprime.');
+        flash('success', 'Client supprimé.');
         $this->redirect('/clients');
     }
 
@@ -181,7 +196,7 @@ class ClientController extends Controller
             $this->notFound('Client introuvable.');
         }
         if (empty($client['siren'])) {
-            flash('error', "Aucun SIREN renseigne : impossible d'interroger l'API.");
+            flash('error', "Aucun SIREN renseigné : impossible d'interroger l'API.");
             $this->redirect('/clients/' . $id);
         }
 
@@ -190,7 +205,7 @@ class ClientController extends Controller
         $donnees = $service->lookup((string) $client['siren'], $encours);
 
         if ($donnees === null) {
-            flash('error', "Aucune donnee trouvee pour le SIREN " . $client['siren'] . '.');
+            flash('error', "Aucune donnée trouvée pour le SIREN " . $client['siren'] . '.');
             $this->redirect('/clients/' . $id);
         }
 
@@ -201,7 +216,7 @@ class ClientController extends Controller
         $clients->update((int) $id, $champs);
         Audit::log('client_sync_api', 'client', (int) $id, ['source' => $donnees['_source'] ?? null]);
 
-        flash('success', 'Donnees mises a jour depuis ' . ($donnees['_source'] ?? 'l\'API') . '.');
+        flash('success', 'Données mises à jour depuis ' . ($donnees['_source'] ?? 'l\'API') . '.');
         $this->redirect('/clients/' . $id);
     }
 
@@ -216,7 +231,7 @@ class ClientController extends Controller
 
         $service = new OneMinAiService();
         if (!$service->isEnabled()) {
-            flash('error', "L'analyse IA n'est pas configuree (Parametres > Intelligence artificielle).");
+            flash('error', "L'analyse IA n'est pas configurée (Paramètres > Intelligence artificielle).");
             $this->redirect('/clients/' . $id);
         }
 
@@ -224,7 +239,7 @@ class ClientController extends Controller
         $resultat = $service->analyserConfiance($client, $encours);
 
         if (($resultat['decision'] ?? '') === 'erreur') {
-            flash('error', "L'analyse IA a echoue : " . e($resultat['raison'] ?? 'erreur inconnue'));
+            flash('error', "L'analyse IA a échoué : " . e($resultat['raison'] ?? 'erreur inconnue'));
             $this->redirect('/clients/' . $id);
         }
 
@@ -249,7 +264,7 @@ class ClientController extends Controller
 
         Audit::log('client_analyse_ia', 'client', (int) $id, ['decision' => $analyse['decision']]);
 
-        flash('success', "Analyse IA enregistree (decision : " . $analyse['decision'] . ").");
+        flash('success', "Analyse IA enregistrée (décision : " . $analyse['decision'] . ").");
         $this->redirect('/clients/' . $id . '#ia');
     }
 
@@ -263,7 +278,7 @@ class ClientController extends Controller
 
         $contenu = trim((string) $this->post('contenu', ''));
         if ($contenu === '') {
-            flash('error', 'La note ne peut pas etre vide.');
+            flash('error', 'La note ne peut pas être vide.');
             $this->redirect('/clients/' . $id . '#notes-client');
         }
 
@@ -274,8 +289,12 @@ class ClientController extends Controller
         ]);
 
         Audit::log('client_note_ajout', 'client', (int) $id, ['note_id' => $noteId]);
+        (new MentionService())->notifier(
+            $contenu, (int) Auth::id(), 'clients',
+            'note sur le client ' . $client['raison_sociale'], '/clients/' . (int) $id . '#notes-client'
+        );
 
-        flash('success', 'Note ajoutee.');
+        flash('success', 'Note ajoutée.');
         $this->redirect('/clients/' . $id . '#notes-client');
     }
 
@@ -294,7 +313,7 @@ class ClientController extends Controller
         $notes->delete((int) $noteId);
         Audit::log('client_note_suppression', 'client', (int) $id, ['note_id' => (int) $noteId]);
 
-        flash('success', 'Note supprimee.');
+        flash('success', 'Note supprimée.');
         $this->redirect('/clients/' . $id . '#notes-client');
     }
 

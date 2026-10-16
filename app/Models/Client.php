@@ -16,7 +16,25 @@ class Client extends Model
         'score_solvabilite', 'ia_score', 'ia_decision', 'ia_analyse', 'ia_synced_at',
         'source_api', 'raw_data', 'data_synced_at', 'notes',
         'actif', 'created_by',
+        'procedure_date_parution', 'bodacc_derniere_annonce', 'bodacc_checked_at', 'code_erp',
     ];
+
+    /** Recherche rapide pour les selecteurs asynchrones (autocompletion). */
+    public function suggerer(string $q, int $limite = 15): array
+    {
+        $like = '%' . $q . '%';
+        return Database::fetchAll(
+            'SELECT id, raison_sociale, siren, ville FROM clients
+             WHERE actif = 1 AND (raison_sociale LIKE :q1 OR siren LIKE :q2 OR siret LIKE :q3 OR ville LIKE :q4 OR code_erp LIKE :q5)
+             ORDER BY raison_sociale ASC LIMIT ' . max(1, min(50, $limite)),
+            ['q1' => $like, 'q2' => $like, 'q3' => $like, 'q4' => $like, 'q5' => $like]
+        );
+    }
+
+    public function findByCodeErp(string $code): ?array
+    {
+        return $code === '' ? null : $this->findBy('code_erp', $code);
+    }
 
     /**
      * Recherche paginee de clients.

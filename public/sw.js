@@ -1,4 +1,4 @@
-const CACHE_NAME = 'locavente-litiges-v1.0.1';
+const CACHE_NAME = 'locavente-litiges-v1.1.0';
 const OFFLINE_URL = './offline.html';
 
 const APP_SHELL = [
@@ -49,6 +49,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req).catch(() => caches.match(OFFLINE_URL))
     );
+    return;
+  }
+
+  // Seules les ressources statiques sont mises en cache : jamais les réponses dynamiques
+  // (JSON d'autocomplétion, téléchargements, flux iCal, API...) qui doivent toujours être fraîches.
+  if (!url.pathname.includes('/assets/') && !url.pathname.endsWith('/manifest.json')) {
     return;
   }
 

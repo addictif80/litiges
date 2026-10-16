@@ -63,7 +63,7 @@ class Router
         }
 
         if ($pathMatched) {
-            $this->abort(405, "Methode non autorisee.");
+            $this->abort(405, "Méthode non autorisée.");
         }
         $this->abort(404, "Page introuvable.");
     }
@@ -87,10 +87,15 @@ class Router
                 return false;
             }
             if (!Auth::peut($module) || ($ecriture && !Auth::canWrite())) {
-                $this->abort(403, "Acces non autorise a ce module.");
+                $this->abort(403, "Accès non autorisé à ce module.");
                 return false;
             }
             return true;
+        }
+
+        // API REST : authentification par jeton Bearer (api:read / api:write).
+        if ($guard === 'api:read' || $guard === 'api:write') {
+            return ApiAuth::exiger($guard === 'api:write');
         }
 
         switch ($guard) {
@@ -116,7 +121,7 @@ class Router
                     return false;
                 }
                 if (!Auth::isAdmin()) {
-                    $this->abort(403, "Acces reserve a l'administrateur.");
+                    $this->abort(403, "Accès réservé à l'administrateur.");
                     return false;
                 }
                 return true;

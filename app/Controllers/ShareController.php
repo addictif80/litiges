@@ -4,20 +4,51 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Audit;
+use App\Core\RateLimiter;
+use App\Core\Request;
 use App\Core\Session;
 use App\Models\ClientNote;
+use App\Models\Document;
 use App\Models\Litige;
 use App\Models\LitigeStatut;
 use App\Models\Partage;
 use App\Models\Relance;
+use App\Services\UploadService;
 
 /**
  * Acces public en LECTURE SEULE via un code d'acces ou un lien public (pour les agences).
  * Aucune authentification utilisateur : la portee est definie par le partage.
+ * Un mot de passe facultatif peut proteger le partage ; chaque consultation est journalisee.
  */
 class ShareController extends Controller
 {
     private const SESSION_KEY = '_partage';
+    private const SESSION_ATTENTE = '_partage_attente';
+
+    /** Essais infructueux autorises par adresse IP sur la fenetre ci-dessous. */
+    private const ESSAIS_MAX = 10;
+    private const FENETRE    = 900; // 15 minutes
+
+    private static function cleQuota(): string
+    {
+        return 'share:' . Request::ip();
+    }
+
+    /** Bloque l'IP qui accumule les codes / liens / mots de passe invalides. */
+    private function exigerQuota(): void
+    {
+        $attente = RateLimiter::bloque(self::cleQuota(), self::ESSAIS_MAX, self::FENETRE);
+        if ($attente !== null) {
+            http_response_code(429);
+            header('Retry-After: ' . $attente);
+            $_SESSION['_errors'] = ['code' => RateLimiter::message($attente)];
+            $this->view('share/form', [
+                'titre'   => 'Consultation en lecture seule',
+                'partage' => null,
+            ], 'layouts/share');
+            exit;
+        }
+    }
 
     public function form(): void
     {
@@ -29,39 +60,88 @@ class ShareController extends Controller
 
     public function access(): void
     {
+        $this->exigerQuota();
+
         $code = strtoupper(trim((string) $this->post('code', '')));
         $partage = (new Partage())->findByCode($code);
 
         if (!$partage) {
-            Audit::log('partage_echec', 'partage', null, ['code' => $code]);
-            $_SESSION['_errors'] = ['code' => "Code d'acces invalide ou expire."];
+            RateLimiter::hit(self::cleQuota(), self::ESSAIS_MAX, self::FENETRE);
+            Audit::log('partage_echec', 'partage', null, ['code' => substr($code, 0, 3) . '***']);
+            $_SESSION['_errors'] = ['code' => "Code d'accès invalide ou expiré."];
             $this->redirect('/partage');
         }
 
-        Session::set(self::SESSION_KEY, (int) $partage['id']);
-        Session::regenerate();
-        (new Partage())->enregistrerVue((int) $partage['id']);
-        Audit::log('partage_acces', 'partage', (int) $partage['id']);
-
-        $this->redirect('/partage/consultation');
+        $this->ouvrir($partage, 'code');
     }
 
     /** Acces direct via un lien public (/partage/lien/{token}). */
     public function viaLien(string $token): void
     {
+        $this->exigerQuota();
+
         $partage = (new Partage())->findByToken($token);
         if (!$partage) {
-            Audit::log('partage_echec', 'partage', null, ['token' => substr($token, 0, 8)]);
-            $_SESSION['_errors'] = ['code' => "Lien d'acces invalide ou expire."];
+            RateLimiter::hit(self::cleQuota(), self::ESSAIS_MAX, self::FENETRE);
+            Audit::log('partage_echec', 'partage', null, ['token' => substr($token, 0, 4) . '***']);
+            $_SESSION['_errors'] = ['code' => "Lien d'accès invalide ou expiré."];
             $this->redirect('/partage');
         }
 
+        $this->ouvrir($partage, 'lien');
+    }
+
+    /** Ouvre la consultation, ou demande d'abord le mot de passe du partage. */
+    private function ouvrir(array $partage, string $via): void
+    {
+        if (!empty($partage['mot_de_passe_hash'])) {
+            Session::set(self::SESSION_ATTENTE, ['id' => (int) $partage['id'], 'via' => $via]);
+            $this->redirect('/partage/mot-de-passe');
+        }
+        $this->accorder($partage, $via);
+    }
+
+    private function accorder(array $partage, string $via): never
+    {
+        Session::forget(self::SESSION_ATTENTE);
         Session::set(self::SESSION_KEY, (int) $partage['id']);
         Session::regenerate();
-        (new Partage())->enregistrerVue((int) $partage['id']);
-        Audit::log('partage_acces', 'partage', (int) $partage['id'], ['via' => 'lien']);
+
+        $model = new Partage();
+        $model->enregistrerVue((int) $partage['id']);
+        $model->journaliser((int) $partage['id'], 'acces_' . $via);
+        Audit::log('partage_acces', 'partage', (int) $partage['id'], ['via' => $via]);
 
         $this->redirect('/partage/consultation');
+    }
+
+    public function showMotDePasse(): void
+    {
+        if ($this->partageEnAttente() === null) {
+            $this->redirect('/partage');
+        }
+        $this->view('share/mot_de_passe', ['titre' => 'Accès protégé'], 'layouts/share');
+    }
+
+    public function verifierMotDePasse(): void
+    {
+        $this->exigerQuota();
+        $partage = $this->partageEnAttente();
+        if ($partage === null) {
+            $this->redirect('/partage');
+        }
+
+        $motDePasse = (string) ($_POST['mot_de_passe'] ?? '');
+        if (!password_verify($motDePasse, (string) $partage['mot_de_passe_hash'])) {
+            RateLimiter::hit(self::cleQuota(), self::ESSAIS_MAX, self::FENETRE);
+            (new Partage())->journaliser((int) $partage['id'], 'echec_mot_de_passe');
+            Audit::log('partage_echec', 'partage', (int) $partage['id'], ['raison' => 'mot_de_passe']);
+            $_SESSION['_errors'] = ['mot_de_passe' => 'Mot de passe incorrect.'];
+            $this->redirect('/partage/mot-de-passe');
+        }
+
+        $via = (string) (Session::get(self::SESSION_ATTENTE)['via'] ?? 'lien');
+        $this->accorder($partage, $via);
     }
 
     public function index(): void
@@ -102,10 +182,12 @@ class ShareController extends Controller
 
         $litige = (new Litige())->findFull((int) $id);
         if (!$litige || !$this->dansPerimetre($partage, $litige)) {
-            $this->notFound('Litige introuvable ou hors de votre perimetre de consultation.');
+            $this->notFound('Litige introuvable ou hors de votre périmètre de consultation.');
         }
 
-        (new Partage())->enregistrerVue((int) $partage['id']);
+        $model = new Partage();
+        $model->enregistrerVue((int) $partage['id']);
+        $model->journaliser((int) $partage['id'], 'vue_litige', (int) $id);
 
         $this->view('share/show', [
             'titre'       => 'Litige ' . $litige['reference'],
@@ -113,14 +195,53 @@ class ShareController extends Controller
             'litige'      => $litige,
             'relances'    => (new Relance())->forLitige((int) $id),
             'clientNotes' => (new ClientNote())->forClient((int) $litige['client_id']),
-            'types'       => LitigeController::TYPES,
+            'documents'   => (int) $partage['afficher_documents'] === 1 ? (new Document())->publicsPourLitige((int) $id) : [],
+            'types'       => \App\Enums\TypeLitige::options(),
         ], 'layouts/share');
+    }
+
+    /** Telechargement d'un document explicitement marque comme public sur ce litige. */
+    public function document(string $id, string $documentId): void
+    {
+        $partage = $this->partageCourant();
+        if (!$partage || (int) $partage['afficher_documents'] !== 1) {
+            $this->redirect('/partage');
+        }
+
+        $litige = (new Litige())->findFull((int) $id);
+        if (!$litige || !$this->dansPerimetre($partage, $litige)) {
+            $this->notFound('Document introuvable.');
+        }
+
+        $document = (new Document())->find((int) $documentId);
+        if (!$document || (int) $document['litige_id'] !== (int) $id || (int) $document['partage_public'] !== 1) {
+            $this->notFound('Document introuvable.');
+        }
+
+        $chemin = (new UploadService())->pathFor($document);
+        if ($chemin === null) {
+            $this->notFound('Fichier absent du stockage.');
+        }
+
+        (new Partage())->journaliser((int) $partage['id'], 'document', (int) $id);
+        Audit::log('partage_document', 'document', (int) $documentId, ['partage_id' => (int) $partage['id']]);
+
+        $nom   = (string) $document['nom_original'];
+        $ascii = preg_replace('/[^A-Za-z0-9._-]/', '_', $nom) ?: 'document';
+        header('Content-Type: ' . ($document['mime'] ?: 'application/octet-stream'));
+        header('Content-Disposition: attachment; filename="' . $ascii . '"; filename*=UTF-8\'\'' . rawurlencode($nom));
+        header('Content-Length: ' . filesize($chemin));
+        header('X-Content-Type-Options: nosniff');
+        header("Content-Security-Policy: sandbox; default-src 'none'");
+        readfile($chemin);
+        exit;
     }
 
     public function exitShare(): void
     {
         Session::forget(self::SESSION_KEY);
-        flash('success', 'Vous avez quitte la consultation.');
+        Session::forget(self::SESSION_ATTENTE);
+        flash('success', 'Vous avez quitté la consultation.');
         $this->redirect('/partage');
     }
 
@@ -136,6 +257,22 @@ class ShareController extends Controller
         if (!$partage || (int) $partage['actif'] !== 1
             || ($partage['expires_at'] !== null && strtotime((string) $partage['expires_at']) < time())) {
             Session::forget(self::SESSION_KEY);
+            return null;
+        }
+        return $partage;
+    }
+
+    /** Partage dont on attend le mot de passe (code ou lien deja valides). */
+    private function partageEnAttente(): ?array
+    {
+        $attente = Session::get(self::SESSION_ATTENTE);
+        if (!is_array($attente) || empty($attente['id'])) {
+            return null;
+        }
+        $partage = (new Partage())->find((int) $attente['id']);
+        if (!$partage || (int) $partage['actif'] !== 1 || empty($partage['mot_de_passe_hash'])
+            || ($partage['expires_at'] !== null && strtotime((string) $partage['expires_at']) < time())) {
+            Session::forget(self::SESSION_ATTENTE);
             return null;
         }
         return $partage;

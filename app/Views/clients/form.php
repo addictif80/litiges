@@ -32,7 +32,7 @@ $sourcesOk = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
         </div>
         <div class="aide">Saisissez au moins 2 caractères puis cliquez sur un résultat pour pré-remplir la fiche.</div>
         <div class="resultats-api" data-api-resultats style="display:none"></div>
-        <script>document.querySelector('[data-api-resultats]').style.display='block';</script>
+        <script nonce="<?= e(csp_nonce()) ?>">document.querySelector('[data-api-resultats]').style.display='block';</script>
     </div>
 </div>
 

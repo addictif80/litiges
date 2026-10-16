@@ -151,6 +151,75 @@ class NotificationService
         $this->creer($dest, 'litige_note', "Nouvelle note sur le litige : {$ref}", url('/litiges/' . (int) ($litige['id'] ?? 0) . '#notes'), (int) ($litige['id'] ?? 0));
     }
 
+    /** Le litige est entierement regle : proposer la cloture au responsable (ou aux administrateurs). */
+    public function litigeSolde(array $litige): void
+    {
+        $dest = $this->responsableOuAdmins($litige);
+        $this->creer(
+            $dest,
+            'litige_solde',
+            'Litige soldé, à clôturer : ' . (string) ($litige['reference'] ?? ''),
+            url('/litiges/' . (int) ($litige['id'] ?? 0)),
+            (int) ($litige['id'] ?? 0)
+        );
+    }
+
+    /** Une personne est citee (@identifiant) dans une note de litige ou de client. */
+    public function mention(int $destinataireId, string $contexte, string $lien, int $auteurId, ?int $litigeId = null): void
+    {
+        if ($destinataireId === $auteurId) {
+            return;
+        }
+        $this->creer($destinataireId, 'mention', 'Vous avez été cité(e) : ' . $contexte, url($lien), $litigeId);
+    }
+
+    public function tacheAssignee(array $tache, int $auteurId): void
+    {
+        $dest = (int) ($tache['assigne_a'] ?? 0);
+        if ($dest <= 0 || $dest === $auteurId) {
+            return;
+        }
+        $this->creer(
+            $dest,
+            'tache_assignee',
+            'Nouvelle tâche : ' . mb_substr((string) ($tache['titre'] ?? ''), 0, 120),
+            url('/taches'),
+            !empty($tache['litige_id']) ? (int) $tache['litige_id'] : null
+        );
+    }
+
+    /** Un client suivi vient de faire l'objet d'une procedure collective. */
+    public function procedureCollective(array $client, array $litiges, string $libelle): void
+    {
+        $destinataires = [];
+        foreach ($litiges as $l) {
+            if (!empty($l['responsable_id'])) {
+                $destinataires[] = (int) $l['responsable_id'];
+            }
+        }
+        $destinataires = array_merge($destinataires, $this->administrateurs());
+        $this->creer(
+            array_values(array_unique($destinataires)),
+            'procedure_collective',
+            sprintf('Procédure collective : %s (%s). Déclarez votre créance dans les délais.', (string) $client['raison_sociale'], $libelle),
+            url('/clients/' . (int) $client['id'])
+        );
+    }
+
+    /** @return int[] */
+    public function administrateurs(): array
+    {
+        $rows = Database::fetchAll("SELECT id FROM users WHERE role = 'admin' AND actif = 1");
+        return array_map(static fn (array $r): int => (int) $r['id'], $rows);
+    }
+
+    /** @return int[] */
+    private function responsableOuAdmins(array $litige): array
+    {
+        $resp = (int) ($litige['responsable_id'] ?? 0);
+        return $resp > 0 ? [$resp] : $this->administrateurs();
+    }
+
     public function chatMessage(array $chat, string $titre, int $auteurId): void
     {
         $dest = $this->destinatairesChat($chat, $auteurId);

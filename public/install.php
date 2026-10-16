@@ -76,13 +76,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$dejaInstalle) {
             $sql = (string) file_get_contents($schemaFile);
             executerSchema($pdo, $sql);
 
-            // Marque les migrations fournies comme deja appliquees : le schema
-            // ci-dessus represente deja l'etat courant, inutile de les rejouer.
-            foreach (glob($root . '/database/migrations/*.sql') ?: [] as $fichierMigration) {
-                $contenuMigration = (string) file_get_contents($fichierMigration);
-                $pdo->prepare('INSERT INTO migrations (migration, checksum) VALUES (:m, :c)
-                               ON DUPLICATE KEY UPDATE checksum = VALUES(checksum)')
-                    ->execute(['m' => basename($fichierMigration), 'c' => md5($contenuMigration)]);
+            // Applique les migrations (tables, colonnes et donnees de reference ajoutees
+            // apres schema.sql). Elles sont idempotentes ; le Migrator les enregistre et
+            // memorise l'etat (storage/migrations.state) pour ne pas les rejouer.
+            if (!defined('APP_ROOT')) {
+                define('APP_ROOT', $root);
+            }
+            spl_autoload_register(static function (string $classe) use ($root): void {
+                if (str_starts_with($classe, 'App\\')) {
+                    $fichier = $root . '/app/' . str_replace('\\', '/', substr($classe, 4)) . '.php';
+                    if (is_file($fichier)) {
+                        require_once $fichier;
+                    }
+                }
+            });
+            if (!is_dir($root . '/storage/logs')) {
+                @mkdir($root . '/storage/logs', 0775, true);
+            }
+            \App\Core\Database::init([
+                'host' => $dbHost, 'port' => $dbPort, 'database' => $dbName,
+                'username' => $dbUser, 'password' => $dbPass, 'charset' => 'utf8mb4',
+            ]);
+            $rapportMigrations = (new \App\Core\Migrator())->force();
+            foreach ($rapportMigrations as $ligneMigration) {
+                if (($ligneMigration['statut'] ?? '') === 'erreur') {
+                    throw new RuntimeException('Migration ' . $ligneMigration['nom'] . ' : ' . ($ligneMigration['erreur'] ?? 'erreur inconnue'));
+                }
             }
 
             // Creation de l'administrateur
@@ -170,7 +189,7 @@ function executerSchema(PDO $pdo, string $sql): void
 
 /** Verifications de l'environnement. */
 $checks = [
-    'PHP >= 8.0'          => version_compare(PHP_VERSION, '8.0.0', '>='),
+    'PHP >= 8.1'          => version_compare(PHP_VERSION, '8.1.0', '>='),
     'Extension PDO'       => extension_loaded('pdo'),
     'Pilote pdo_mysql'    => extension_loaded('pdo_mysql'),
     'Extension json'      => extension_loaded('json'),

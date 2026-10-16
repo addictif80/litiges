@@ -5,69 +5,105 @@ namespace App\Controllers;
 
 use App\Core\Audit;
 use App\Core\Auth;
-use App\Core\Database;
-use App\Core\Validator;
+use App\Enums\Priorite;
+use App\Enums\TypeLitige;
+use App\Exceptions\DoublonException;
+use App\Exceptions\ValidationException;
+use App\Exceptions\WorkflowException;
 use App\Models\Agence;
 use App\Models\Client;
 use App\Models\Contact;
-use App\Models\Note;
+use App\Models\Courrier;
 use App\Models\Document;
+use App\Models\FiltreEnregistre;
 use App\Models\Litige;
 use App\Models\LitigeHistorique;
 use App\Models\LitigeStatut;
+use App\Models\ModeleCourrier;
+use App\Models\Note;
+use App\Models\Paiement;
 use App\Models\Relance;
+use App\Models\Tache;
 use App\Models\User;
+use App\Services\BodaccWatchService;
+use App\Services\EcheanceService;
 use App\Services\ExportService;
-use App\Services\CompanyLookupService;
-use App\Services\NotificationService;
+use App\Services\LitigeService;
+use App\Services\PenaltyService;
+use App\Services\WorkflowService;
+use App\Services\XlsxWriter;
 
 class LitigeController extends Controller
 {
-    public const TYPES = [
-        'impaye'          => 'Impaye',
-        'retard_paiement' => 'Retard de paiement',
-        'degradation'     => 'Degradation materiel',
-        'restriction'     => 'Non-restitution',
-        'vol'             => 'Vol / disparition',
-        'sinistre'        => 'Sinistre / accident',
-        'penalites'       => 'Penalites de retard',
-        'carburant'       => 'Carburant',
-        'assurance'       => 'Assurance / franchise',
-        'autre'           => 'Autre',
+    /** Colonnes des exports : cle => [libelle, type]. */
+    private const COLONNES_EXPORT = [
+        'reference'         => ['Référence', 'texte'],
+        'date_ouverture'    => ["Date d'ouverture", 'date'],
+        'raison_sociale'    => ['Client', 'texte'],
+        'client_siren'      => ['SIREN', 'texte'],
+        'objet'             => ['Objet', 'texte'],
+        'type_libelle'      => ['Type', 'texte'],
+        'statut_libelle'    => ['Statut', 'texte'],
+        'finalite_libelle'  => ['Finalité', 'texte'],
+        'montant_principal' => ['Montant principal', 'nombre'],
+        'montant_penalites' => ['Pénalités', 'nombre'],
+        'montant_recupere'  => ['Montant récupéré', 'nombre'],
+        'encours'           => ['Encours', 'nombre'],
+        'date_echeance'     => ['Échéance', 'date'],
+        'date_cloture'      => ['Date clôture', 'date'],
+        'responsable_nom'   => ['Responsable', 'texte'],
+        'priorite'          => ['Priorité', 'texte'],
+        'numero_facture'    => ['N° facture', 'texte'],
+        'agence_nom'        => ['Agence', 'texte'],
     ];
 
     public function index(): void
     {
+        $this->appliquerFiltreEnregistre();
         $filtres = $this->filtres();
         $page    = max(1, $this->int('page', 1));
         $perPage = max(10, min(100, $this->int('par_page', 25)));
 
         $litiges = new Litige();
-        $resultat = $litiges->search($filtres, $page, $perPage);
 
-        if ($this->input('format') === 'csv') {
-            $this->export($resultat['rows']);
+        $format = (string) $this->input('format', '');
+        if (in_array($format, ['csv', 'xlsx', 'pdf'], true)) {
+            $this->export($litiges->pourExport($filtres), $format);
         }
 
+        $resultat = $litiges->search($filtres, $page, $perPage);
+        $statutModel = new LitigeStatut();
+
         $this->view('litiges/index', [
-            'titre'      => 'Litiges',
-            'litiges'    => $resultat['rows'],
-            'total'      => $resultat['total'],
-            'page'       => $resultat['page'],
-            'pages'      => $resultat['pages'],
-            'perPage'    => $perPage,
-            'filtres'    => $filtres,
-            'statuts'    => (new LitigeStatut())->statuts(),
-            'finalites'  => (new LitigeStatut())->finalites(),
-            'types'      => self::TYPES,
-            'agences'    => (new Agence())->listActives(),
+            'titre'        => 'Litiges',
+            'litiges'      => $resultat['rows'],
+            'total'        => $resultat['total'],
+            'page'         => $resultat['page'],
+            'pages'        => $resultat['pages'],
+            'perPage'      => $perPage,
+            'filtres'      => $filtres,
+            'statuts'      => $statutModel->statuts(),
+            'finalites'    => $statutModel->finalites(),
+            'types'        => TypeLitige::options(),
+            'priorites'    => Priorite::options(),
+            'agences'      => (new Agence())->listActives(),
             'responsables' => (new User())->listActifs(),
-            'clients'    => (new Client())->all('actif = 1', [], 'raison_sociale ASC'),
+            'client'       => $filtres['client_id'] ? (new Client())->find((int) $filtres['client_id']) : null,
+            'criteres'     => Litige::criteresDeTri(),
+            'filtresSauvegardes' => (new FiltreEnregistre())->visiblesPour((int) Auth::id(), 'litiges'),
+            'xlsxDisponible' => XlsxWriter::disponible(),
         ]);
     }
 
     private function filtres(): array
     {
+        // Tri multi-criteres : "tri" (principal) + "tri2" (secondaire) => "priorite,echeance".
+        $tri  = (string) $this->input('tri', 'recent');
+        $tri2 = (string) $this->input('tri2', '');
+        if ($tri2 !== '' && $tri2 !== $tri && !str_contains($tri, ',')) {
+            $tri .= ',' . $tri2;
+        }
+
         return [
             'q'              => (string) $this->input('q', ''),
             'client_id'      => $this->int('client_id'),
@@ -81,43 +117,91 @@ class LitigeController extends Controller
             'date_to'        => (string) $this->input('date_to', ''),
             'etat'           => (string) $this->input('etat', ''),
             'relance_due'    => $this->int('relance_due'),
-            'tri'            => (string) $this->input('tri', 'recent'),
+            'promesse_depassee' => $this->int('promesse_depassee'),
+            'tri'            => $tri,
         ];
+    }
+
+    /** ?filtre=12 : charge les criteres d'un filtre enregistre (si aucun autre critere n'est fourni). */
+    private function appliquerFiltreEnregistre(): void
+    {
+        $id = $this->int('filtre');
+        if ($id <= 0) {
+            return;
+        }
+        $filtre = (new FiltreEnregistre())->find($id);
+        if (!$filtre || ((int) $filtre['user_id'] !== (int) Auth::id() && (int) $filtre['partage'] !== 1)) {
+            return;
+        }
+        $params = json_decode((string) $filtre['parametres'], true);
+        if (!is_array($params)) {
+            return;
+        }
+        foreach ($params as $cle => $valeur) {
+            if (is_scalar($valeur) && !isset($_GET[$cle])) {
+                $_GET[$cle] = (string) $valeur;
+            }
+        }
     }
 
     public function show(string $id): void
     {
-        $litige = (new Litige())->findFull((int) $id);
+        $litiges = new Litige();
+        $litige  = $litiges->findFull((int) $id);
         if (!$litige) {
             $this->notFound('Litige introuvable.');
         }
 
+        $litigeId = (int) $id;
+        $workflow = new WorkflowService();
+        $statutModel = new LitigeStatut();
+
+        $prerequis = [];
+        foreach ($statutModel->statuts() as $s) {
+            $regles = $workflow->prerequis((int) $s['id']);
+            if ($regles !== []) {
+                $prerequis[(int) $s['id']] = array_map(static fn (string $r): string => WorkflowService::REGLES[$r], $regles);
+            }
+        }
+
+        $client = (new Client())->find((int) $litige['client_id']);
+
         $this->view('litiges/show', [
-            'titre'    => 'Litige ' . $litige['reference'],
-            'litige'   => $litige,
-            'relances' => (new Relance())->forLitige((int) $id),
-            'notes'    => (new Note())->forLitige((int) $id),
-            'documents' => (new Document())->forLitige((int) $id),
-            'historique' => (new LitigeHistorique())->forLitige((int) $id),
-            'contacts' => (new Contact())->forClient((int) $litige['client_id']),
-            'statuts'  => (new LitigeStatut())->statuts(),
-            'finalites' => (new LitigeStatut())->finalites(),
-            'types'    => self::TYPES,
+            'titre'      => 'Litige ' . $litige['reference'],
+            'litige'     => $litige,
+            'relances'   => (new Relance())->forLitige($litigeId),
+            'notes'      => (new Note())->forLitige($litigeId),
+            'documents'  => (new Document())->forLitige($litigeId),
+            'historique' => (new LitigeHistorique())->forLitige($litigeId),
+            'contacts'   => (new Contact())->forClient((int) $litige['client_id']),
+            'statuts'    => $statutModel->statuts(),
+            'finalites'  => $statutModel->finalites(),
+            'types'      => TypeLitige::options(),
             'responsables' => (new User())->listActifs(),
+            'paiements'  => (new Paiement())->forLitige($litigeId),
+            'echeances'  => (new EcheanceService())->avecStatuts($litigeId),
+            'courriers'  => (new Courrier())->forLitige($litigeId),
+            'taches'     => (new Tache())->forLitige($litigeId),
+            'modeles'    => (new ModeleCourrier())->actifs(),
+            'penalites'  => (new PenaltyService())->calculer($litige),
+            'transitions' => $workflow->transitionsDepuis((int) $litige['statut_id']),
+            'prerequis'  => $prerequis,
+            'client'     => $client,
+            'creance'    => $client ? BodaccWatchService::infoCreance($client, $litige) : null,
         ]);
     }
 
     public function create(): void
     {
         $clientId = $this->int('client_id');
-        $clients  = (new Client())->all('actif = 1', [], 'raison_sociale ASC');
+        $statutModel = new LitigeStatut();
 
         $this->view('litiges/form', [
             'titre'   => 'Nouveau litige',
             'litige'  => [
                 'client_id'           => $clientId,
                 'date_ouverture'      => date('Y-m-d'),
-                'statut_id'           => (new LitigeStatut())->defaultStatutId(),
+                'statut_id'           => $statutModel->defaultStatutId(),
                 'responsable_id'      => Auth::id(),
                 'priorite'            => 'normale',
                 'montant_principal'   => 0,
@@ -126,45 +210,35 @@ class LitigeController extends Controller
                 'delai_relance_jours' => (int) \App\Core\Settings::get('delai_relance_defaut_jours', 15),
             ],
             'mode'    => 'creation',
-            'clients' => $clients,
-            'statuts' => (new LitigeStatut())->statuts(),
-            'finalites' => (new LitigeStatut())->finalites(),
+            // Client pre-selectionne : parametre d'URL, ou saisie precedente apres une erreur de validation.
+            'clientPre' => ($clientId ?: (int) ($_SESSION['_old']['client_id'] ?? 0))
+                ? (new Client())->find($clientId ?: (int) $_SESSION['_old']['client_id'])
+                : null,
+            'statuts' => $statutModel->statuts(),
+            'finalites' => $statutModel->finalites(),
             'agences' => (new Agence())->listActives(),
             'responsables' => (new User())->listActifs(),
-            'types'   => self::TYPES,
+            'types'   => TypeLitige::options(),
+            'priorites' => Priorite::options(),
+            'doublons' => $_SESSION['_doublons'] ?? [],
         ]);
+        unset($_SESSION['_doublons']);
     }
 
     public function store(): void
     {
-        $data      = $this->collect();
-        $validator = $this->validate($data);
-
-        if ($validator->fails()) {
-            $this->backWithErrors('/litiges/nouveau', $validator->errors(), $_POST);
+        $service = new LitigeService();
+        try {
+            $id = $service->creer($this->donneesFormulaire(), Auth::id(), $this->post('confirmer_doublon') !== null);
+        } catch (ValidationException $e) {
+            $this->backWithErrors('/litiges/nouveau', $e->erreurs, $_POST);
+        } catch (DoublonException $e) {
+            $_SESSION['_doublons'] = $e->doublons;
+            $this->backWithErrors('/litiges/nouveau', ['doublon' => $e->getMessage()], $_POST);
         }
 
-        $litiges = new Litige();
-        $data['reference']  = $litiges->generateReference();
-        $data['created_by'] = (int) Auth::id();
-
-        // Prochaine relance calculee automatiquement.
-        $data['prochaine_relance_at'] = $this->calculerProchaineRelance($data['date_ouverture'], (int) $data['delai_relance_jours']);
-
-        // Coherence cloture.
-        $statut = (new LitigeStatut())->find((int) $data['statut_id']);
-        $data['date_cloture'] = ($statut && (int) $statut['cloturant'] === 1) ? date('Y-m-d') : null;
-
-        $id = $litiges->create($data);
-
-        (new LitigeHistorique())->log($id, (int) Auth::id(), 'creation', null, null, $data['reference'], 'Creation du litige');
-        Audit::log('litige_creation', 'litige', $id, ['reference' => $data['reference']]);
-
-        $this->syncClientSolvabilite((int) $data['client_id']);
-
-        (new NotificationService())->litigeCree(['id' => $id, 'reference' => $data['reference']], (int) Auth::id());
-
-        flash('success', 'Litige ' . $data['reference'] . ' cree.');
+        $litige = (new Litige())->find($id);
+        flash('success', 'Litige ' . e($litige['reference'] ?? '') . ' créé.');
         $this->redirect('/litiges/' . $id);
     }
 
@@ -174,109 +248,97 @@ class LitigeController extends Controller
         if (!$litige) {
             $this->notFound('Litige introuvable.');
         }
+        $statutModel = new LitigeStatut();
 
         $this->view('litiges/form', [
             'titre'   => 'Modifier ' . $litige['reference'],
             'litige'  => $litige,
             'mode'    => 'edition',
-            'clients' => (new Client())->all('actif = 1', [], 'raison_sociale ASC'),
-            'statuts' => (new LitigeStatut())->statuts(),
-            'finalites' => (new LitigeStatut())->finalites(),
+            'clientPre' => (new Client())->find((int) $litige['client_id']),
+            'statuts' => $statutModel->statuts(),
+            'finalites' => $statutModel->finalites(),
             'agences' => (new Agence())->listActives(),
             'responsables' => (new User())->listActifs(),
-            'types'   => self::TYPES,
+            'types'   => TypeLitige::options(),
+            'priorites' => Priorite::options(),
+            'doublons' => [],
         ]);
     }
 
     public function update(string $id): void
     {
-        $litiges = new Litige();
-        $avant   = $litiges->find((int) $id);
-        if (!$avant) {
-            $this->notFound('Litige introuvable.');
+        $service = new LitigeService();
+        try {
+            $service->modifier((int) $id, $this->donneesFormulaire(), Auth::id(), $this->peutForcerWorkflow());
+        } catch (ValidationException $e) {
+            if (isset($e->erreurs['litige'])) {
+                $this->notFound('Litige introuvable.');
+            }
+            $this->backWithErrors('/litiges/' . $id . '/modifier', $e->erreurs, $_POST);
+        } catch (WorkflowException $e) {
+            $this->backWithErrors('/litiges/' . $id . '/modifier', ['statut_id' => implode(' ', $e->erreurs)], $_POST);
         }
 
-        $data      = $this->collect();
-        $validator = $this->validate($data);
-
-        if ($validator->fails()) {
-            $this->backWithErrors('/litiges/' . $id . '/modifier', $validator->errors(), $_POST);
-        }
-
-        $data['prochaine_relance_at'] = $this->calculerProchaineRelance(
-            $avant['derniere_relance_at'] ? date('Y-m-d', strtotime((string) $avant['derniere_relance_at'])) : $data['date_ouverture'],
-            (int) $data['delai_relance_jours']
-        );
-
-        $statut  = (new LitigeStatut())->find((int) $data['statut_id']);
-        $cloture = $statut && (int) $statut['cloturant'] === 1;
-        $data['date_cloture'] = $cloture
-            ? ($avant['date_cloture'] ?: date('Y-m-d'))
-            : null;
-
-        $litiges->update((int) $id, $data);
-        (new LitigeHistorique())->diff((int) $id, (int) Auth::id(), $avant, array_merge($avant, $data));
-        Audit::log('litige_modification', 'litige', (int) $id, ['reference' => $avant['reference']]);
-
-        (new NotificationService())->litigeModifie(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id());
-
-        flash('success', 'Litige mis a jour.');
+        flash('success', 'Litige mis à jour.');
         $this->redirect('/litiges/' . $id);
     }
 
     /** Changement rapide de statut depuis la fiche litige. */
     public function changerStatut(string $id): void
     {
-        $litiges = new Litige();
-        $avant   = $litiges->find((int) $id);
-        if (!$avant) {
-            $this->notFound('Litige introuvable.');
-        }
-
-        $statutId   = $this->int('statut_id');
-        $finaliteId = $this->int('finalite_id');
-        $commentaire = trim((string) $this->post('commentaire', ''));
-
-        $statut = (new LitigeStatut())->find($statutId);
-        if (!$statut) {
-            flash('error', 'Statut invalide.');
+        $service = new LitigeService();
+        $statutId = $this->int('statut_id');
+        try {
+            $service->changerStatut(
+                (int) $id,
+                $statutId,
+                $this->int('finalite_id') ?: null,
+                trim((string) $this->post('commentaire', '')),
+                Auth::id(),
+                $this->peutForcerWorkflow()
+            );
+        } catch (WorkflowException $e) {
+            flash('error', e(implode(' ', $e->erreurs)) . (Auth::isAdmin() ? ' (Un administrateur peut forcer le changement.)' : ''));
+            $this->back('/litiges/' . $id);
+        } catch (ValidationException $e) {
+            flash('error', e($e->getMessage()));
             $this->back('/litiges/' . $id);
         }
 
-        $cloturant = (int) $statut['cloturant'] === 1;
-        $update = [
-            'statut_id'   => $statutId,
-            'finalite_id' => $finaliteId > 0 ? $finaliteId : null,
-            'date_cloture' => $cloturant ? ($avant['date_cloture'] ?: date('Y-m-d')) : null,
-        ];
-
-        // Montant recupere ajustable lors d'une cloture.
-        if ($cloturant && $this->post('montant_recupere') !== null) {
-            $update['montant_recupere'] = $this->post('montant_recupere');
-        }
-
-        $litiges->update((int) $id, $update);
-
-        (new LitigeHistorique())->log(
-            (int) $id,
-            (int) Auth::id(),
-            'changement_statut',
-            'Statut',
-            (string) $avant['statut_id'],
-            (string) $statutId,
-            $commentaire !== '' ? $commentaire : ('Nouveau statut : ' . $statut['libelle'])
-        );
-        Audit::log('litige_statut', 'litige', (int) $id, ['statut' => $statut['libelle']]);
-
-        $notif = new NotificationService();
-        if ($cloturant) {
-            $notif->litigeResolu(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id(), (string) $statut['libelle']);
-        } else {
-            $notif->litigeModifie(['id' => (int) $id, 'reference' => $avant['reference']], (int) Auth::id());
-        }
-
-        flash('success', 'Statut mis a jour : ' . $statut['libelle'] . '.');
+        $statut = (new LitigeStatut())->find($statutId);
+        flash('success', 'Statut mis à jour : ' . e($statut['libelle'] ?? '') . '.');
         $this->redirect('/litiges/' . $id);
+    }
+
+    /** Actions groupees depuis la liste (responsable, priorite, statut). */
+    public function actionGroupee(): void
+    {
+        $ids = array_map('intval', (array) ($_POST['ids'] ?? []));
+        if ($ids === []) {
+            flash('warning', 'Aucun litige sélectionné.');
+            $this->back('/litiges');
+        }
+
+        $changement = [];
+        $action = (string) $this->post('action', '');
+        if ($action === 'responsable') {
+            $changement['responsable_id'] = $this->int('responsable_id') ?: null;
+        } elseif ($action === 'priorite') {
+            $changement['priorite'] = (string) $this->post('priorite', '');
+        } elseif ($action === 'statut') {
+            $changement['statut_id'] = $this->int('statut_id');
+        } else {
+            flash('error', 'Action inconnue.');
+            $this->back('/litiges');
+        }
+
+        $resultat = (new LitigeService())->actionGroupee($ids, $changement, Auth::id(), $this->peutForcerWorkflow());
+
+        flash('success', $resultat['modifies'] . ' litige(s) mis à jour.');
+        if ($resultat['refuses'] !== []) {
+            flash('warning', 'Non modifiés : ' . e(implode(' | ', $resultat['refuses'])));
+        }
+        $this->back('/litiges');
     }
 
     public function destroy(string $id): void
@@ -285,128 +347,94 @@ class LitigeController extends Controller
             $this->forbidden('Seul un administrateur peut supprimer un litige.');
         }
 
-        $litiges = new Litige();
-        $litige  = $litiges->find((int) $id);
-        if (!$litige) {
+        try {
+            (new LitigeService())->supprimer((int) $id);
+        } catch (ValidationException) {
             $this->notFound('Litige introuvable.');
         }
 
-        $litiges->delete((int) $id);
-        Audit::log('litige_suppression', 'litige', (int) $id, ['reference' => $litige['reference']]);
-
-        flash('success', 'Litige supprime.');
+        flash('success', 'Litige supprimé.');
         $this->redirect('/litiges');
     }
 
     // ------------------------------------------------------------------
 
-    private function collect(): array
+    /** Seul un administrateur peut passer outre le workflow (case "forcer"). */
+    private function peutForcerWorkflow(): bool
+    {
+        return Auth::isAdmin() && $this->post('forcer_workflow') !== null;
+    }
+
+    private function donneesFormulaire(): array
     {
         return [
-            'client_id'           => $this->int('client_id'),
-            'agence_id'           => $this->int('agence_id') ?: null,
-            'objet'               => (string) $this->post('objet', ''),
-            'description'         => (string) $this->post('description', ''),
-            'type_litige'         => (string) $this->post('type_litige', ''),
+            'client_id'           => $this->post('client_id'),
+            'agence_id'           => $this->post('agence_id'),
+            'objet'               => $this->post('objet', ''),
+            'description'         => $this->post('description', ''),
+            'type_litige'         => $this->post('type_litige', ''),
             'montant_principal'   => $this->post('montant_principal', '0'),
             'montant_penalites'   => $this->post('montant_penalites', '0'),
-            'montant_recupere'    => $this->post('montant_recupere', '0'),
-            'date_ouverture'      => (string) $this->post('date_ouverture', ''),
-            'date_echeance'       => (string) $this->post('date_echeance', '') ?: null,
-            'statut_id'           => $this->int('statut_id'),
-            'finalite_id'         => $this->int('finalite_id') ?: null,
-            'responsable_id'      => $this->int('responsable_id') ?: null,
-            'priorite'            => (string) $this->post('priorite', 'normale'),
-            'numero_facture'      => (string) $this->post('numero_facture', '') ?: null,
-            'date_facture'        => (string) $this->post('date_facture', '') ?: null,
-            'numero_contrat'      => (string) $this->post('numero_contrat', '') ?: null,
-            'materiel'            => (string) $this->post('materiel', '') ?: null,
-            'reference_externe'   => (string) $this->post('reference_externe', '') ?: null,
-            'delai_relance_jours' => $this->int('delai_relance_jours', 15),
-            'prochaine_relance_at' => (string) $this->post('prochaine_relance_at', '') ?: null,
+            'date_ouverture'      => $this->post('date_ouverture', ''),
+            'date_echeance'       => $this->post('date_echeance', ''),
+            'statut_id'           => $this->post('statut_id'),
+            'finalite_id'         => $this->post('finalite_id'),
+            'responsable_id'      => $this->post('responsable_id'),
+            'priorite'            => $this->post('priorite', 'normale'),
+            'numero_facture'      => $this->post('numero_facture', ''),
+            'date_facture'        => $this->post('date_facture', ''),
+            'numero_contrat'      => $this->post('numero_contrat', ''),
+            'materiel'            => $this->post('materiel', ''),
+            'reference_externe'   => $this->post('reference_externe', ''),
+            'delai_relance_jours' => $this->post('delai_relance_jours', 15),
+            'prochaine_relance_at' => $this->post('prochaine_relance_at', ''),
+            'penalites_auto'      => $this->post('penalites_auto') !== null,
+            'taux_penalite'       => $this->post('taux_penalite', ''),
+            'indemnite_forfaitaire' => $this->post('indemnite_forfaitaire') !== null,
+            'penalites_depuis'    => $this->post('penalites_depuis', ''),
         ];
     }
 
-    private function validate(array $data): Validator
+    private function export(array $lignes, string $format): never
     {
-        $validator = new Validator($data, [
-            'client_id' => 'Le client', 'objet' => "L'objet", 'date_ouverture' => "La date d'ouverture",
-            'statut_id' => 'Le statut',
-        ]);
-
-        $validator
-            ->custom('client_id', (int) $data['client_id'] > 0, 'Le client est obligatoire.')
-            ->required('objet')->length('objet', 3, 190)
-            ->required('date_ouverture')->date('date_ouverture')
-            ->custom('statut_id', (int) $data['statut_id'] > 0, 'Le statut est obligatoire.')
-            ->numeric('montant_principal')->numeric('montant_penalites')->numeric('montant_recupere')
-            ->in('priorite', ['basse', 'normale', 'haute', 'critique'])
-            ->custom('montant_principal', (float) str_replace(',', '.', (string) $data['montant_principal']) >= 0, 'Le montant ne peut pas etre negatif.');
-
-        if (!empty($data['date_echeance'])) {
-            $validator->date('date_echeance');
+        $types = TypeLitige::options();
+        foreach ($lignes as &$l) {
+            $l['type_libelle'] = $types[$l['type_litige'] ?? ''] ?? ($l['type_litige'] ?? '');
         }
-        if (!empty($data['date_facture'])) {
-            $validator->date('date_facture');
-        }
-        if ((int) $data['client_id'] > 0 && !Database::exists('clients', 'id = :id', ['id' => (int) $data['client_id']])) {
-            $validator->custom('client_id', false, 'Le client selectionne est introuvable.');
-        }
+        unset($l);
 
-        return $validator;
-    }
+        $colonnes = array_map(static fn (array $c): string => $c[0], self::COLONNES_EXPORT);
+        $typesCol = array_map(static fn (array $c): string => $c[1], self::COLONNES_EXPORT);
+        $nom      = 'litiges_' . date('Ymd_His');
 
-    private function calculerProchaineRelance(string $base, int $jours): string
-    {
-        $jours = $jours > 0 ? $jours : 15;
-        $ts    = strtotime($base) ?: time();
-        return date('Y-m-d', strtotime("+{$jours} days", $ts));
-    }
+        Audit::log('export_' . $format, 'litige', null, ['nb' => count($lignes)]);
 
-    private function syncClientSolvabilite(int $clientId): void
-    {
-        // Recalcul du score de solvabilite interne (gratuit) avec l'encours a jour.
-        try {
-            $clients = new Client();
-            $client  = $clients->find($clientId);
-            if (!$client) {
-                return;
+        if ($format === 'xlsx') {
+            if (!XlsxWriter::disponible()) {
+                flash('error', "L'extension PHP zip est requise pour l'export Excel.");
+                $this->back('/litiges');
             }
-
-            $encours = $clients->encours($clientId);
-            $score   = (new CompanyLookupService())->scoreSolvabilite($client, $encours);
-
-            $clients->update($clientId, ['score_solvabilite' => $score]);
-            Audit::log('score_client', 'client', $clientId, ['encours' => $encours, 'score' => $score]);
-        } catch (\Throwable) {
-            // ignore
+            (new ExportService())->xlsx($nom, $colonnes, $lignes, $typesCol, 'Litiges');
         }
-    }
 
-    private function export(array $lignes): never
-    {
-        $colonnes = [
-            'reference'         => 'Reference',
-            'date_ouverture'    => "Date d'ouverture",
-            'raison_sociale'    => 'Client',
-            'client_siren'      => 'SIREN',
-            'objet'             => 'Objet',
-            'type_litige'       => 'Type',
-            'statut_libelle'    => 'Statut',
-            'finalite_libelle'  => 'Finalite',
-            'montant_principal' => 'Montant principal',
-            'montant_penalites' => 'Penalites',
-            'montant_recupere'  => 'Montant recupere',
-            'encours'           => 'Encours',
-            'date_echeance'     => 'Echeance',
-            'date_cloture'      => 'Date cloture',
-            'responsable_nom'   => 'Responsable',
-            'priorite'          => 'Priorite',
-            'numero_facture'    => 'N. facture',
-            'agence_nom'        => 'Agence',
-        ];
+        if ($format === 'pdf') {
+            $html = \App\Core\View::render('litiges/rapport', [
+                'titre' => 'Liste des litiges',
+                'lignes' => $lignes,
+                'colonnes' => $colonnes,
+                'nb' => count($lignes),
+            ], null);
+            if (ExportService::pdfDisponible()) {
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $nom . '.pdf"');
+                echo ExportService::htmlVersPdf($html, 'A4', 'landscape');
+                exit;
+            }
+            // Sans moteur PDF : page imprimable (Ctrl+P > Enregistrer au format PDF).
+            echo $html;
+            exit;
+        }
 
-        Audit::log('export_csv', 'litige', null, ['nb' => count($lignes)]);
-        (new ExportService())->csv('litiges_' . date('Ymd_His'), $colonnes, $lignes);
+        (new ExportService())->csv($nom, $colonnes, $lignes);
     }
 }

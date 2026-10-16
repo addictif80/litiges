@@ -45,7 +45,7 @@ class UserController extends Controller
         $id = $users->createUser($data, $password);
 
         Audit::log('user_creation', 'user', $id, ['username' => $data['username'], 'role' => $data['role']]);
-        flash('success', 'Utilisateur cree.');
+        flash('success', 'Utilisateur créé.');
         $this->redirect('/utilisateurs');
     }
 
@@ -80,10 +80,10 @@ class UserController extends Controller
         // Un admin ne peut pas se retrograder ni se desactiver lui-meme.
         if ($idUser === (int) Auth::id()) {
             if ($data['role'] !== 'admin') {
-                $validator->custom('role', false, 'Vous ne pouvez pas retirer votre propre role administrateur.');
+                $validator->custom('role', false, 'Vous ne pouvez pas retirer votre propre rôle administrateur.');
             }
             if ((int) $data['actif'] !== 1) {
-                $validator->custom('actif', false, 'Vous ne pouvez pas desactiver votre propre compte.');
+                $validator->custom('actif', false, 'Vous ne pouvez pas désactiver votre propre compte.');
             }
         }
 
@@ -103,7 +103,7 @@ class UserController extends Controller
             Auth::refresh();
         }
 
-        flash('success', 'Utilisateur mis a jour.');
+        flash('success', 'Utilisateur mis à jour.');
         $this->redirect('/utilisateurs');
     }
 
@@ -122,7 +122,23 @@ class UserController extends Controller
         Audit::log('user_reset_password', 'user', (int) $id, ['username' => $user['username']]);
 
         flash('warning', 'Mot de passe temporaire pour ' . $user['username'] . ' : ' . $temporaire
-            . ' (a communiquer puis a changer a la premiere connexion).');
+            . ' (à communiquer puis à changer à la première connexion).');
+        $this->redirect('/utilisateurs');
+    }
+
+    /** Desactive la 2FA d'un utilisateur (telephone perdu). */
+    public function reset2fa(string $id): void
+    {
+        $users = new User();
+        $user  = $users->find((int) $id);
+        if (!$user) {
+            $this->notFound('Utilisateur introuvable.');
+        }
+
+        (new \App\Services\TwoFactorService())->desactiver((int) $id);
+        Audit::log('2fa_reinitialisee_par_admin', 'user', (int) $id, ['username' => $user['username']]);
+
+        flash('success', 'Double authentification réinitialisée pour ' . e($user['username']) . '.');
         $this->redirect('/utilisateurs');
     }
 
@@ -143,7 +159,7 @@ class UserController extends Controller
         $users->delete($idUser);
         Audit::log('user_suppression', 'user', $idUser, ['username' => $user['username']]);
 
-        flash('success', 'Utilisateur supprime.');
+        flash('success', 'Utilisateur supprimé.');
         $this->redirect('/utilisateurs');
     }
 
@@ -173,15 +189,15 @@ class UserController extends Controller
             ->in('role', ['admin', 'gestionnaire', 'consultant', 'lecteur']);
 
         if ($users->usernameExists($data['username'], $exceptId)) {
-            $validator->custom('username', false, 'Cet identifiant est deja utilise.');
+            $validator->custom('username', false, 'Cet identifiant est déjà utilisé.');
         }
         if (!empty($data['email']) && $users->emailExists($data['email'], $exceptId)) {
-            $validator->custom('email', false, 'Cette adresse email est deja utilisee.');
+            $validator->custom('email', false, 'Cette adresse e-mail est déjà utilisée.');
         }
         if ($exceptId === null && mb_strlen($password) < $minLength) {
-            $validator->custom('password', false, "Le mot de passe doit contenir au moins {$minLength} caracteres.");
+            $validator->custom('password', false, "Le mot de passe doit contenir au moins {$minLength} caractères.");
         } elseif ($password !== '' && mb_strlen($password) < $minLength) {
-            $validator->custom('password', false, "Le mot de passe doit contenir au moins {$minLength} caracteres.");
+            $validator->custom('password', false, "Le mot de passe doit contenir au moins {$minLength} caractères.");
         }
 
         return $validator;

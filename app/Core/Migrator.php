@@ -42,6 +42,11 @@ class Migrator
      */
     public static function autoRun(): void
     {
+        // Les deploiements qui preferent lancer "php cron/migrate.php" peuvent
+        // desactiver l'application automatique : app.auto_migrate = false.
+        if (!(bool) Config::get('app.auto_migrate', true)) {
+            return;
+        }
         try {
             $migrator = new self();
             if ($migrator->isUpToDate()) {
@@ -59,9 +64,15 @@ class Migrator
         if (!is_dir($this->dir)) {
             return [];
         }
-        $files = glob($this->dir . '/*.sql') ?: [];
+        $files = array_merge(glob($this->dir . '/*.sql') ?: [], glob($this->dir . '/*.php') ?: []);
         sort($files, SORT_STRING);
         return $files;
+    }
+
+    /** Des migrations sont-elles en attente d'application (sans requete SQL) ? */
+    public function enAttenteRapide(): bool
+    {
+        return !$this->isUpToDate();
     }
 
     /**
@@ -102,7 +113,11 @@ class Migrator
 
                 $sql = (string) @file_get_contents($file);
                 try {
-                    $this->execute($sql);
+                    if (str_ends_with($file, '.php')) {
+                        $this->executerPhp($file);
+                    } else {
+                        $this->execute($sql);
+                    }
                     $this->markApplied($nom, md5($sql));
                     $this->forgetError($nom);
                     $rapport[] = ['nom' => $nom, 'statut' => 'appliquee'];
@@ -206,6 +221,19 @@ class Migrator
             ['m' => $nom, 'c' => $checksum]
         );
         $this->appliedLoaded = false;
+    }
+
+    /**
+     * Migration PHP : le fichier retourne une fonction (PDO $pdo): void.
+     * Utile pour les evolutions conditionnelles (voir App\Core\Schema).
+     */
+    private function executerPhp(string $file): void
+    {
+        $migration = require $file;
+        if (!is_callable($migration)) {
+            throw new \RuntimeException(basename($file) . ' doit retourner une fonction.');
+        }
+        $migration(Database::pdo());
     }
 
     private function execute(string $sql): void

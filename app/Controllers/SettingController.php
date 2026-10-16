@@ -9,17 +9,49 @@ use App\Core\Settings;
 use App\Core\Validator;
 use App\Models\LitigeStatut;
 use App\Services\Api\OneMinAiService;
+use App\Services\WorkflowService;
 
 class SettingController extends Controller
 {
     public function statuts(): void
     {
         $model = new LitigeStatut();
+        $workflow = new WorkflowService();
+        $statuts = $model->statuts(false);
+
+        $transitions = [];
+        $regles = [];
+        foreach ($statuts as $s) {
+            $transitions[(int) $s['id']] = $workflow->transitionsDepuis((int) $s['id']) ?? [];
+            $regles[(int) $s['id']] = $workflow->prerequis((int) $s['id']);
+        }
+
         $this->view('settings/statuts', [
-            'titre'    => 'Statuts & finalites',
-            'statuts'  => $model->statuts(false),
+            'titre'    => 'Statuts & finalités',
+            'statuts'  => $statuts,
             'finalites' => $model->finalites(false),
+            'transitions' => $transitions,
+            'reglesStatut' => $regles,
+            'reglesDisponibles' => WorkflowService::REGLES,
         ]);
+    }
+
+    /** Workflow d'un statut : statuts de destination autorises + pre-requis. */
+    public function updateWorkflow(string $id): void
+    {
+        $model  = new LitigeStatut();
+        $statut = $model->find((int) $id);
+        if (!$statut || $statut['categorie'] !== 'statut') {
+            $this->notFound('Statut introuvable.');
+        }
+
+        $vers = array_map('intval', (array) ($_POST['transitions'] ?? []));
+        $regles = array_values(array_intersect(array_keys(WorkflowService::REGLES), (array) ($_POST['regles'] ?? [])));
+        (new WorkflowService())->configurer((int) $id, $vers, $regles);
+
+        Audit::log('workflow_modification', 'statut', (int) $id, ['transitions' => count($vers), 'regles' => $regles]);
+        flash('success', 'Workflow du statut « ' . e($statut['libelle']) . ' » enregistré.');
+        $this->redirect('/parametres/statuts#statut-' . (int) $id);
     }
 
     public function storeStatut(): void
@@ -37,7 +69,7 @@ class SettingController extends Controller
         $id = $model->create($data);
 
         Audit::log('statut_creation', 'statut', $id, ['libelle' => $data['libelle']]);
-        flash('success', 'Element ajoute.');
+        flash('success', 'Élément ajouté.');
         $this->redirect('/parametres/statuts');
     }
 
@@ -46,7 +78,7 @@ class SettingController extends Controller
         $model  = new LitigeStatut();
         $statut = $model->find((int) $id);
         if (!$statut) {
-            $this->notFound('Element introuvable.');
+            $this->notFound('Élément introuvable.');
         }
 
         $data      = $this->collectStatut((string) $statut['categorie']);
@@ -62,7 +94,7 @@ class SettingController extends Controller
 
         $model->update((int) $id, $data);
         Audit::log('statut_modification', 'statut', (int) $id);
-        flash('success', 'Element mis a jour.');
+        flash('success', 'Élément mis à jour.');
         $this->redirect('/parametres/statuts');
     }
 
@@ -71,10 +103,10 @@ class SettingController extends Controller
         $model  = new LitigeStatut();
         $statut = $model->find((int) $id);
         if (!$statut) {
-            $this->notFound('Element introuvable.');
+            $this->notFound('Élément introuvable.');
         }
         if ((int) $statut['systeme'] === 1) {
-            flash('error', 'Cet element est systeme et ne peut pas etre supprime. Desactivez-le plutot.');
+            flash('error', 'Cet élément est système et ne peut pas être supprimé. Désactivez-le plutôt.');
             $this->redirect('/parametres/statuts');
         }
 
@@ -84,20 +116,20 @@ class SettingController extends Controller
             0
         );
         if ($utilise > 0) {
-            flash('error', "Impossible de supprimer : cet element est utilise par {$utilise} litige(s). Desactivez-le plutot.");
+            flash('error', "Impossible de supprimer : cet élément est utilisé par {$utilise} litige(s). Désactivez-le plutôt.");
             $this->redirect('/parametres/statuts');
         }
 
         $model->delete((int) $id);
         Audit::log('statut_suppression', 'statut', (int) $id);
-        flash('success', 'Element supprime.');
+        flash('success', 'Élément supprimé.');
         $this->redirect('/parametres/statuts');
     }
 
     public function parametres(): void
     {
         $this->view('settings/parametres', [
-            'titre'    => 'Parametres',
+            'titre'    => 'Paramètres',
             'settings' => Settings::all(),
         ]);
     }
@@ -124,6 +156,45 @@ class SettingController extends Controller
         $pairs['bodacc_actif']        = $this->post('bodacc_actif') !== null ? '1' : '0';
         $pairs['score_interne_actif'] = $this->post('score_interne_actif') !== null ? '1' : '0';
         $pairs['oneminai_enabled']    = $this->post('oneminai_enabled') !== null ? '1' : '0';
+
+        // --- Societe, recouvrement, securite, integrations (nouveaux parametres) ---
+        foreach (['societe_adresse', 'societe_telephone', 'societe_email', 'societe_signataire', 'societe_iban', 'blg_dossier'] as $cle) {
+            $pairs[$cle] = mb_substr(trim((string) $this->post($cle, '')), 0, 500);
+        }
+        if (str_contains($pairs['blg_dossier'], '..')) {
+            $pairs['blg_dossier'] = '';
+        }
+
+        $nombre = function (string $cle, float $min, float $max, float $defaut) {
+            $v = str_replace(',', '.', trim((string) $this->post($cle, '')));
+            return (string) (is_numeric($v) ? max($min, min($max, (float) $v)) : $defaut);
+        };
+        $pairs['courrier_delai_jours']          = $nombre('courrier_delai_jours', 1, 90, 8);
+        $pairs['penalite_taux_annuel']          = $nombre('penalite_taux_annuel', 0, 100, 12);
+        $pairs['penalite_indemnite_forfaitaire'] = $nombre('penalite_indemnite_forfaitaire', 0, 10000, 40);
+        $pairs['creance_delai_mois']            = $nombre('creance_delai_mois', 1, 12, 2);
+        $pairs['bodacc_surveillance_lot']       = $nombre('bodacc_surveillance_lot', 1, 500, 40);
+        $pairs['rapport_hebdo_jour']            = $nombre('rapport_hebdo_jour', 1, 7, 1);
+        $pairs['partage_expiration_defaut_jours'] = $nombre('partage_expiration_defaut_jours', 0, 3650, 30);
+
+        $pairs['penalite_activer_cron']          = $this->post('penalite_activer_cron') !== null ? '1' : '0';
+        $pairs['bodacc_surveillance_active']     = $this->post('bodacc_surveillance_active') !== null ? '1' : '0';
+        $pairs['clamav_actif']                   = $this->post('clamav_actif') !== null ? '1' : '0';
+        $pairs['clamav_bloquer_si_indisponible'] = $this->post('clamav_bloquer_si_indisponible') !== null ? '1' : '0';
+        $pairs['rapport_hebdo_actif']            = $this->post('rapport_hebdo_actif') !== null ? '1' : '0';
+        $pairs['blg_actif']                      = $this->post('blg_actif') !== null ? '1' : '0';
+
+        $regle2fa = (string) $this->post('2fa_obligatoire', '0');
+        $pairs['2fa_obligatoire'] = in_array($regle2fa, ['0', 'admin', 'tous'], true) ? $regle2fa : '0';
+
+        $clamav = trim((string) $this->post('clamav_adresse', ''));
+        $pairs['clamav_adresse'] = (str_starts_with($clamav, 'unix://') || str_starts_with($clamav, 'tcp://')) ? $clamav : '';
+        if ($pairs['clamav_adresse'] === '') {
+            $pairs['clamav_actif'] = '0';
+        }
+
+        $destinataires = trim((string) $this->post('rapport_hebdo_destinataires', 'admin'));
+        $pairs['rapport_hebdo_destinataires'] = $destinataires !== '' ? mb_substr($destinataires, 0, 500) : 'admin';
 
         // Permissions des roles
         $pairs['perm_gestionnaire_litiges']  = $this->post('perm_gestionnaire_litiges')  !== null ? '1' : '0';
@@ -160,7 +231,7 @@ class SettingController extends Controller
         Settings::setMany($pairs);
         Audit::log('parametres_modification', 'settings');
 
-        flash('success', 'Parametres enregistres.');
+        flash('success', 'Paramètres enregistrés.');
         $this->redirect('/parametres');
     }
 
@@ -223,7 +294,7 @@ class SettingController extends Controller
             $params['id'] = $exceptId;
         }
         if ((int) Database::value($sql, $params, 0) > 0) {
-            $validator->custom('code', false, 'Ce code est deja utilise.');
+            $validator->custom('code', false, 'Ce code est déjà utilisé.');
         }
 
         return $validator;

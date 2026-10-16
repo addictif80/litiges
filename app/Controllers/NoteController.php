@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Models\Litige;
 use App\Models\LitigeHistorique;
 use App\Models\Note;
+use App\Services\MentionService;
 use App\Services\NotificationService;
 
 class NoteController extends Controller
@@ -22,7 +23,7 @@ class NoteController extends Controller
 
         $contenu = trim((string) $this->post('contenu', ''));
         if ($contenu === '') {
-            flash('error', 'La note ne peut pas etre vide.');
+            flash('error', 'La note ne peut pas être vide.');
             $this->redirect('/litiges/' . $id . '#notes');
         }
 
@@ -36,8 +37,12 @@ class NoteController extends Controller
         Audit::log('note_ajout', 'litige', $id);
 
         (new NotificationService())->noteLitige($litige, (int) Auth::id());
+        (new MentionService())->notifier(
+            $contenu, (int) Auth::id(), 'litiges',
+            'note sur le litige ' . $litige['reference'], '/litiges/' . $id . '#notes', $id
+        );
 
-        flash('success', 'Note ajoutee.');
+        flash('success', 'Note ajoutée.');
         $this->redirect('/litiges/' . $id . '#notes');
     }
 
@@ -55,14 +60,22 @@ class NoteController extends Controller
 
         $contenu = trim((string) $this->post('contenu', ''));
         if ($contenu === '') {
-            flash('error', 'La note ne peut pas etre vide.');
+            flash('error', 'La note ne peut pas être vide.');
             $this->redirect('/litiges/' . $litigeId . '#notes');
         }
 
         $notes->update((int) $noteId, ['contenu' => mb_substr($contenu, 0, 5000)]);
         Audit::log('note_modification', 'litige', (int) $litigeId, ['note_id' => (int) $noteId]);
 
-        flash('success', 'Note mise a jour.');
+        $litige = (new Litige())->find((int) $litigeId);
+        if ($litige) {
+            (new MentionService())->notifier(
+                $contenu, (int) Auth::id(), 'litiges',
+                'note sur le litige ' . $litige['reference'], '/litiges/' . (int) $litigeId . '#notes', (int) $litigeId
+            );
+        }
+
+        flash('success', 'Note mise à jour.');
         $this->redirect('/litiges/' . $litigeId . '#notes');
     }
 
@@ -81,7 +94,7 @@ class NoteController extends Controller
         $notes->delete((int) $noteId);
         Audit::log('note_suppression', 'litige', (int) $litigeId, ['note_id' => (int) $noteId]);
 
-        flash('success', 'Note supprimee.');
+        flash('success', 'Note supprimée.');
         $this->redirect('/litiges/' . $litigeId . '#notes');
     }
 }

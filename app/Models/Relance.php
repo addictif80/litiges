@@ -13,27 +13,6 @@ class Relance extends Model
         'contenu', 'resultat', 'montant_promis', 'date_promesse', 'prochaine_action_at', 'created_by',
     ];
 
-    public const TYPES = [
-        'relance'           => 'Relance',
-        'appel'             => 'Appel telephonique',
-        'email'             => 'Email',
-        'courrier'          => 'Courrier',
-        'mise_en_demeure'   => 'Mise en demeure',
-        'promesse_paiement' => 'Promesse de paiement',
-        'echelonnement'     => 'Echelonnement',
-        'visite'            => 'Visite / rendez-vous',
-        'autre'             => 'Autre',
-    ];
-
-    public const CANAUX = [
-        'telephone' => 'Telephone',
-        'email'     => 'Email',
-        'courrier'  => 'Courrier',
-        'sms'       => 'SMS',
-        'physique'  => 'En personne',
-        'autre'     => 'Autre',
-    ];
-
     public function forLitige(int $litigeId): array
     {
         return Database::fetchAll(

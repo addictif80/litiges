@@ -14,6 +14,12 @@ class Session
             return;
         }
 
+        // L'API REST est sans etat : pas de cookie de session, pas de CSRF.
+        if (ApiAuth::estRequeteApi()) {
+            $_SESSION = [];
+            return;
+        }
+
         $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
@@ -35,7 +41,7 @@ class Session
         if (isset($_SESSION['_last_activity']) && (time() - (int) $_SESSION['_last_activity']) > $lifetime) {
             self::destroy();
             session_start();
-            $_SESSION['_flash']['warning'] = "Votre session a expire. Merci de vous reconnecter.";
+            $_SESSION['_flash']['warning'] = "Votre session a expiré. Merci de vous reconnecter.";
         }
         $_SESSION['_last_activity'] = time();
     }

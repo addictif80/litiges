@@ -90,6 +90,30 @@ if (!function_exists('setting')) {
     }
 }
 
+if (!function_exists('csp_nonce')) {
+    /** Nonce CSP de la requete courante (a mettre sur chaque balise <script> inline). */
+    function csp_nonce(): string
+    {
+        return \App\Core\SecurityHeaders::nonce();
+    }
+}
+
+if (!function_exists('mentions_html')) {
+    /**
+     * Echappe un texte puis met en valeur les mentions @identifiant.
+     * Sans danger : l'echappement est fait avant l'ajout des balises.
+     */
+    function mentions_html(?string $texte): string
+    {
+        $securise = htmlspecialchars((string) $texte, ENT_QUOTES, 'UTF-8');
+        return preg_replace(
+            '/(^|[\s(])@([A-Za-z0-9_.-]{2,60})/u',
+            '$1<span class="mention">@$2</span>',
+            $securise
+        ) ?? $securise;
+    }
+}
+
 if (!function_exists('money')) {
     /** Formate un montant en euros. */
     function money(mixed $value, string $devise = 'EUR'): string

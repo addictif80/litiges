@@ -10,7 +10,18 @@ class Document extends Model
     protected string $table = 'documents';
     protected array $fillable = [
         'litige_id', 'client_id', 'categorie', 'nom_original', 'nom_stocke', 'mime', 'taille', 'uploaded_by',
+        'partage_public',
     ];
+
+    /** Documents d'un litige que l'on a choisi de rendre visibles dans le partage public. */
+    public function publicsPourLitige(int $litigeId): array
+    {
+        return Database::fetchAll(
+            'SELECT id, nom_original, categorie, taille, created_at
+             FROM documents WHERE litige_id = :id AND partage_public = 1 ORDER BY created_at DESC',
+            ['id' => $litigeId]
+        );
+    }
 
     public function forLitige(int $litigeId): array
     {

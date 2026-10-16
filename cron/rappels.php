@@ -11,12 +11,14 @@ declare(strict_types=1);
  *   php cron/rappels.php --quiet      # aucune sortie sur la console (pour le cron)
  *   php cron/rappels.php --help       # affiche cette aide
  *
+ * Pour l'ensemble des traitements quotidiens (rappels, penalites, surveillance
+ * BODACC, synchronisation BLG, RGPD, rapport hebdomadaire...), utilisez plutot
+ * cron/quotidien.php.
+ *
  * Exemple de crontab (tous les jours a 7h) :
  *   0 7 * * * /usr/bin/php /chemin/vers/locavente/cron/rappels.php --quiet
  */
 
-use App\Core\Database;
-use App\Services\Mailer;
 use App\Services\ReminderService;
 
 // --- Securite : execution en ligne de commande uniquement ---------------
@@ -63,44 +65,22 @@ if (!is_file(APP_ROOT . '/config/config.php')) {
 require APP_ROOT . '/app/bootstrap.php';
 
 try {
-    $stats = (new ReminderService())->run($dryRun);
+    $service = new ReminderService();
+    $stats   = $service->run($dryRun);
 } catch (\Throwable $e) {
     fwrite(STDERR, 'Erreur lors de la generation des rappels : ' . $e->getMessage() . PHP_EOL);
     exit(1);
 }
 
-$total = (int) $stats['relance_due'] + (int) $stats['promesse_depassee'] + (int) $stats['echeance_proche'];
+$total = 0;
+foreach (array_keys(ReminderService::LIBELLES) as $cle) {
+    $total += (int) ($stats[$cle] ?? 0);
+}
 
 // --- Envoi du recapitulatif par e-mail (optionnel) ---------------------
 if (!$dryRun && $total > 0) {
     try {
-        $mailer = new Mailer();
-        if ($mailer->isEnabled()) {
-            $admins = Database::fetchAll(
-                "SELECT full_name, username, email FROM users
-                 WHERE role = 'admin' AND actif = 1 AND email IS NOT NULL AND email <> ''"
-            );
-
-            if ($admins !== []) {
-                $lignes = [
-                    'Relances a effectuer'      => (int) $stats['relance_due'],
-                    'Promesses non honorees'    => (int) $stats['promesse_depassee'],
-                    'Echeances proches'         => (int) $stats['echeance_proche'],
-                ];
-                $contenu = '<p>Rappels generes le ' . htmlspecialchars(date('d/m/Y H:i'), ENT_QUOTES, 'UTF-8') . ' :</p><ul>';
-                foreach ($lignes as $libelle => $nb) {
-                    $contenu .= '<li>' . htmlspecialchars($libelle, ENT_QUOTES, 'UTF-8') . ' : <strong>' . $nb . '</strong></li>';
-                }
-                $contenu .= '</ul><p>Connectez-vous a l\'application pour traiter ces relances.</p>';
-
-                $html = $mailer->gabarit('Rappels du ' . date('d/m/Y'), $contenu);
-                foreach ($admins as $admin) {
-                    if ($mailer->send((string) $admin['email'], '[Litiges] Rappels du ' . date('d/m/Y'), $html)) {
-                        $stats['emails']++;
-                    }
-                }
-            }
-        }
+        $stats['emails'] = $service->envoyerRecapitulatif($stats);
     } catch (\Throwable $e) {
         // L'email est secondaire : on n'echoue pas la tache pour autant.
         $ecrire('Avertissement e-mail : ' . $e->getMessage());
@@ -108,15 +88,11 @@ if (!$dryRun && $total > 0) {
 }
 
 // --- Journalisation -----------------------------------------------------
-$ligne = sprintf(
-    '[%s] %srelance_due=%d promesse_depassee=%d echeance_proche=%d emails=%d',
-    date('Y-m-d H:i:s'),
-    $dryRun ? 'DRY-RUN ' : '',
-    (int) $stats['relance_due'],
-    (int) $stats['promesse_depassee'],
-    (int) $stats['echeance_proche'],
-    (int) $stats['emails']
-);
+$morceaux = [];
+foreach ($stats as $cle => $valeur) {
+    $morceaux[] = $cle . '=' . (int) $valeur;
+}
+$ligne = sprintf('[%s] %s%s', date('Y-m-d H:i:s'), $dryRun ? 'DRY-RUN ' : '', implode(' ', $morceaux));
 
 try {
     $dossierLogs = APP_ROOT . '/storage/logs';

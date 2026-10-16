@@ -13,7 +13,20 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
 ?>
 <div class="fil"><a href="<?= url('/litiges') ?>">Litiges</a> / <?= $estEdition ? 'Modifier' : 'Nouveau' ?></div>
 
-<form method="post" action="<?= e($action) ?>" class="grille" style="grid-template-columns:2fr 1fr;align-items:start">
+<?php if (!empty($doublons)): ?>
+    <div class="alerte alerte-warning mb-2">
+        <strong>⚠ Un ou plusieurs litiges semblent déjà exister pour ce client :</strong>
+        <ul style="margin:6px 0 0 18px">
+            <?php foreach ($doublons as $d): ?>
+                <li><a href="<?= url('/litiges/' . (int) $d['id']) ?>" target="_blank" rel="noopener"><?= e($d['reference']) ?></a>
+                    — <?= e($d['objet']) ?> (<?= e($d['statut_libelle']) ?>, <?= money($d['montant_principal']) ?><?= $d['numero_facture'] ? ', facture ' . e($d['numero_facture']) : '' ?>)</li>
+            <?php endforeach; ?>
+        </ul>
+        <label class="check mt-1"><input type="checkbox" name="confirmer_doublon" value="1" form="form-litige"> Créer quand même ce litige</label>
+    </div>
+<?php endif; ?>
+
+<form method="post" action="<?= e($action) ?>" id="form-litige" class="grille" style="grid-template-columns:2fr 1fr;align-items:start">
     <?= csrf_field() ?>
 
     <div>
@@ -23,14 +36,9 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
                 <div class="ligne-champs">
                     <div class="form-groupe" style="grid-column:span 2">
                         <label for="client_id">Client <span class="req">*</span></label>
-                        <select id="client_id" name="client_id" class="<?= $err('client_id') ? 'erreur' : '' ?>" required>
-                            <option value="">— Sélectionner un client —</option>
-                            <?php foreach ($clients as $c): ?>
-                                <option value="<?= (int) $c['id'] ?>" <?= (int) $v('client_id') === (int) $c['id'] ? 'selected' : '' ?>>
-                                    <?= e($c['raison_sociale']) ?><?= $c['siren'] ? ' (' . e($c['siren']) . ')' : '' ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div data-client-picker data-requis data-nom="client_id" data-url="<?= url('/api/clients/suggestions') ?>"
+                             data-valeur="<?= (int) $v('client_id') ?: '' ?>"
+                             data-libelle="<?= e($clientPre ? $clientPre['raison_sociale'] . ($clientPre['siren'] ? ' (' . $clientPre['siren'] . ')' : '') : '') ?>"></div>
                         <?php if ($err('client_id')): ?><div class="msg-erreur"><?= e($err('client_id')) ?></div><?php endif; ?>
                         <div class="aide">Client absent ? <a href="<?= url('/clients/nouveau') ?>" target="_blank">Créer une fiche client</a> (les données seront récupérées automatiquement via SIREN).</div>
                     </div>
@@ -54,8 +62,8 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
                     <div class="form-groupe">
                         <label for="priorite">Priorité</label>
                         <select id="priorite" name="priorite">
-                            <?php foreach (['basse' => 'Basse', 'normale' => 'Normale', 'haute' => 'Haute', 'critique' => 'Critique'] as $k => $lib): ?>
-                                <option value="<?= $k ?>" <?= $v('priorite', 'normale') === $k ? 'selected' : '' ?>><?= $lib ?></option>
+                            <?php foreach ($priorites as $k => $lib): ?>
+                                <option value="<?= e($k) ?>" <?= $v('priorite', 'normale') === $k ? 'selected' : '' ?>><?= e($lib) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -79,11 +87,33 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
                     </div>
                     <div class="form-groupe">
                         <label for="montant_penalites">Pénalités / frais (€)</label>
-                        <input type="text" inputmode="decimal" id="montant_penalites" name="montant_penalites" value="<?= e($v('montant_penalites', '0')) ?>">
+                        <input type="text" inputmode="decimal" id="montant_penalites" name="montant_penalites" value="<?= e($v('montant_penalites', '0')) ?>"
+                               <?= (int) $v('penalites_auto', 0) === 1 ? 'readonly' : '' ?>>
+                        <?php if ((int) $v('penalites_auto', 0) === 1): ?><div class="aide">Calculé automatiquement chaque jour.</div><?php endif; ?>
                     </div>
                     <div class="form-groupe">
-                        <label for="montant_recupere">Montant récupéré (€)</label>
-                        <input type="text" inputmode="decimal" id="montant_recupere" name="montant_recupere" value="<?= e($v('montant_recupere', '0')) ?>">
+                        <label>Montant récupéré (€)</label>
+                        <div class="gras" style="padding:9px 0"><?= money($litige['montant_recupere'] ?? 0) ?></div>
+                        <div class="aide">Somme des paiements enregistrés sur la fiche du litige.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-entete"><h3>Pénalités de retard</h3></div>
+            <div class="card-corps">
+                <label class="check"><input type="checkbox" name="penalites_auto" value="1" <?= (int) $v('penalites_auto', 0) === 1 ? 'checked' : '' ?>> Calculer automatiquement les pénalités (intérêts de retard + indemnité)</label>
+                <label class="check"><input type="checkbox" name="indemnite_forfaitaire" value="1" <?= (int) $v('indemnite_forfaitaire', 0) === 1 ? 'checked' : '' ?>> Ajouter l'indemnité forfaitaire de recouvrement</label>
+                <div class="ligne-champs mt-1">
+                    <div class="form-groupe">
+                        <label for="taux_penalite">Taux annuel spécifique (%)</label>
+                        <input type="text" inputmode="decimal" id="taux_penalite" name="taux_penalite" value="<?= e($v('taux_penalite', '')) ?>" placeholder="Taux par défaut des paramètres">
+                    </div>
+                    <div class="form-groupe">
+                        <label for="penalites_depuis">Pénalités dues depuis le</label>
+                        <input type="date" id="penalites_depuis" name="penalites_depuis" value="<?= e($v('penalites_depuis', '')) ?>">
+                        <div class="aide">Par défaut : date d'échéance, sinon de facture.</div>
                     </div>
                 </div>
             </div>
@@ -130,6 +160,10 @@ $err = static fn (string $cle): ?string => $errors[$cle] ?? null;
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php if ($err('statut_id')): ?><div class="msg-erreur"><?= e($err('statut_id')) ?></div><?php endif; ?>
+                <?php if (\App\Core\Auth::isAdmin() && $estEdition): ?>
+                    <label class="check mb-2"><input type="checkbox" name="forcer_workflow" value="1"> Forcer le statut (ignorer le workflow)</label>
+                <?php endif; ?>
                 <div class="form-groupe">
                     <label for="finalite_id">Finalité (si clôturé)</label>
                     <select id="finalite_id" name="finalite_id">

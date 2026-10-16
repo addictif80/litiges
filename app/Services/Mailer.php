@@ -18,7 +18,10 @@ class Mailer
             && (string) (Settings::get('smtp_host') ?: Config::get('mail.host', '')) !== '';
     }
 
-    public function send(string $to, string $subject, string $htmlBody, string $textBody = ''): bool
+    /**
+     * @param array<int,array{nom:string, contenu:string, mime?:string}> $pieces pieces jointes en memoire
+     */
+    public function send(string $to, string $subject, string $htmlBody, string $textBody = '', array $pieces = []): bool
     {
         $to = trim($to);
         if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
@@ -59,21 +62,46 @@ class Mailer
                 $mail->Subject = $subject;
                 $mail->Body    = $htmlBody;
                 $mail->AltBody = $textBody !== '' ? $textBody : strip_tags($htmlBody);
+                foreach ($pieces as $piece) {
+                    $mail->addStringAttachment(
+                        $piece['contenu'],
+                        $piece['nom'],
+                        \PHPMailer\PHPMailer\PHPMailer::ENCODING_BASE64,
+                        $piece['mime'] ?? 'application/octet-stream'
+                    );
+                }
                 $mail->send();
                 return true;
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                \App\Core\Logger::warning('Envoi e-mail (PHPMailer) en echec', ['message' => $e->getMessage()]);
                 return false;
             }
         }
 
         // --- Repli sur la fonction mail() ---
         try {
-            $headers = [
+            $enTetes = [
                 'MIME-Version: 1.0',
-                'Content-Type: text/html; charset=UTF-8',
                 'From: ' . $this->encodeHeader($fromNom) . ' <' . $from . '>',
             ];
-            return @mail($to, $this->encodeHeader($subject), $htmlBody, implode("\r\n", $headers));
+
+            if ($pieces === []) {
+                $enTetes[] = 'Content-Type: text/html; charset=UTF-8';
+                return @mail($to, $this->encodeHeader($subject), $htmlBody, implode("\r\n", $enTetes));
+            }
+
+            $limite = 'b' . bin2hex(random_bytes(12));
+            $enTetes[] = 'Content-Type: multipart/mixed; boundary="' . $limite . '"';
+            $corps  = "--{$limite}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                . chunk_split(base64_encode($htmlBody)) . "\r\n";
+            foreach ($pieces as $piece) {
+                $nom = preg_replace('/[^A-Za-z0-9._-]/', '_', $piece['nom']) ?: 'piece';
+                $corps .= "--{$limite}\r\nContent-Type: " . ($piece['mime'] ?? 'application/octet-stream') . "; name=\"{$nom}\"\r\n"
+                    . "Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"{$nom}\"\r\n\r\n"
+                    . chunk_split(base64_encode($piece['contenu'])) . "\r\n";
+            }
+            $corps .= "--{$limite}--";
+            return @mail($to, $this->encodeHeader($subject), $corps, implode("\r\n", $enTetes));
         } catch (\Throwable) {
             return false;
         }

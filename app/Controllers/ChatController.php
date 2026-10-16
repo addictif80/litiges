@@ -67,11 +67,11 @@ class ChatController extends Controller
 
         if ($type === 'agence') {
             if (!Auth::isAdmin()) {
-                $this->forbidden("Seul un administrateur peut creer un canal d'agence.");
+                $this->forbidden("Seul un administrateur peut créer un canal d'agence.");
             }
             $agenceId = $this->int('agence_id');
             if ($agenceId <= 0) {
-                flash('error', 'Selectionnez une agence.');
+                flash('error', 'Sélectionnez une agence.');
                 $this->redirect('/chat');
             }
 
@@ -84,7 +84,7 @@ class ChatController extends Controller
             $id  = $chats->creer('agence', 'Canal ' . $nom, $agenceId, $uid, []);
             Audit::log('chat_creation', 'chat', $id, ['type' => 'agence', 'agence_id' => $agenceId]);
 
-            flash('success', "Canal d'agence cree.");
+            flash('success', "Canal d'agence créé.");
             $this->redirect('/chat/' . $id);
         }
 
@@ -100,14 +100,14 @@ class ChatController extends Controller
             $id = $chats->creer('groupe', mb_substr($titre, 0, 150), null, $uid, $membres);
             Audit::log('chat_creation', 'chat', $id, ['type' => 'groupe']);
 
-            flash('success', 'Groupe cree.');
+            flash('success', 'Groupe créé.');
             $this->redirect('/chat/' . $id);
         }
 
         // Discussion 1-a-1
         $dest = $this->int('destinataire_id');
         if ($dest <= 0 || $dest === $uid) {
-            flash('error', 'Selectionnez un destinataire.');
+            flash('error', 'Sélectionnez un destinataire.');
             $this->redirect('/chat');
         }
 

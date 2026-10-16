@@ -36,12 +36,12 @@ class MigrationController extends Controller
                 static fn (array $r): string => $r['nom'] . ' : ' . ($r['erreur'] ?? 'erreur inconnue'),
                 $erreurs
             );
-            flash('error', 'Certaines migrations ont echoue : ' . implode(' | ', $messages));
+            flash('error', 'Certaines migrations ont échoué : ' . implode(' | ', $messages));
         } elseif ($rapport === []) {
-            flash('success', 'La base de donnees est deja a jour.');
+            flash('success', 'La base de données est déjà à jour.');
         } else {
             $noms = array_map(static fn (array $r): string => (string) $r['nom'], $rapport);
-            flash('success', count($noms) . ' migration(s) appliquee(s) : ' . implode(', ', $noms));
+            flash('success', count($noms) . ' migration(s) appliquée(s) : ' . implode(', ', $noms));
         }
 
         $this->redirect('/parametres/migrations');

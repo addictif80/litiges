@@ -31,13 +31,13 @@ class Auth
 
         if ((int) $user['actif'] !== 1) {
             Audit::log('login_echec', 'auth', (int) $user['id'], ['raison' => 'compte_desactive']);
-            return "Ce compte est desactive. Contactez l'administrateur.";
+            return "Ce compte est désactivé. Contactez l'administrateur.";
         }
 
         if (!empty($user['locked_until']) && strtotime((string) $user['locked_until']) > time()) {
             $minutes = max(1, (int) ceil((strtotime((string) $user['locked_until']) - time()) / 60));
             Audit::log('login_echec', 'auth', (int) $user['id'], ['raison' => 'compte_verrouille']);
-            return "Compte temporairement verrouille. Reessayez dans {$minutes} minute(s).";
+            return "Compte temporairement verrouillé. Réessayez dans {$minutes} minute(s).";
         }
 
         if (!password_verify($password, (string) $user['password_hash'])) {
@@ -47,7 +47,16 @@ class Auth
             $restant = max(0, $max - (int) $user['failed_attempts'] - 1);
             return $restant > 0
                 ? "Identifiant ou mot de passe incorrect. Il reste {$restant} tentative(s)."
-                : "Identifiant ou mot de passe incorrect. Compte verrouille.";
+                : "Identifiant ou mot de passe incorrect. Compte verrouillé.";
+        }
+
+        // Double authentification : le mot de passe est bon, mais la session
+        // n'est ouverte qu'apres validation du code (voir terminerDoubleAuth()).
+        if ((int) ($user['totp_enabled'] ?? 0) === 1 && !empty($user['totp_secret'])) {
+            Session::regenerate();
+            $_SESSION['_2fa'] = ['user_id' => (int) $user['id'], 'at' => time()];
+            Audit::log('login_2fa_requis', 'auth', (int) $user['id']);
+            return self::DOUBLE_AUTH_REQUISE;
         }
 
         // Succes
@@ -56,6 +65,54 @@ class Auth
         Audit::log('login', 'auth', (int) $user['id']);
 
         return null;
+    }
+
+    /** Valeur retournee par attempt() quand un code a deux facteurs est attendu. */
+    public const DOUBLE_AUTH_REQUISE = '__2fa__';
+
+    /** Duree de validite (secondes) entre le mot de passe et la saisie du code. */
+    private const DOUBLE_AUTH_DELAI = 300;
+
+    /** Utilisateur ayant valide son mot de passe et attendu pour le 2e facteur. */
+    public static function utilisateurEnAttente2fa(): ?array
+    {
+        $attente = $_SESSION['_2fa'] ?? null;
+        if (!is_array($attente) || (time() - (int) ($attente['at'] ?? 0)) > self::DOUBLE_AUTH_DELAI) {
+            unset($_SESSION['_2fa']);
+            return null;
+        }
+        $user = (new User())->find((int) ($attente['user_id'] ?? 0));
+        return ($user && (int) $user['actif'] === 1) ? $user : null;
+    }
+
+    /** Ouvre la session apres un 2e facteur valide. */
+    public static function terminerDoubleAuth(array $user): void
+    {
+        unset($_SESSION['_2fa']);
+        (new User())->registerSuccessfulLogin((int) $user['id']);
+        self::login($user);
+        Audit::log('login', 'auth', (int) $user['id'], ['2fa' => true]);
+    }
+
+    public static function annulerDoubleAuth(): void
+    {
+        unset($_SESSION['_2fa']);
+    }
+
+    /** L'utilisateur connecte a-t-il active la double authentification ? */
+    public static function a2fa(): bool
+    {
+        return (int) (self::user()['totp_enabled'] ?? 0) === 1;
+    }
+
+    /**
+     * La politique de l'application impose-t-elle la 2FA a l'utilisateur
+     * connecte (parametre 2fa_obligatoire : 0 | admin | tous) ?
+     */
+    public static function a2faObligatoire(): bool
+    {
+        $regle = (string) Settings::get('2fa_obligatoire', '0');
+        return $regle === 'tous' || ($regle === 'admin' && self::isAdmin());
     }
 
     public static function login(array $user): void

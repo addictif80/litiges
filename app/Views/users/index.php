@@ -44,6 +44,14 @@
                         <?= csrf_field() ?>
                         <button type="submit" class="btn-lien">Réinit. mot de passe</button>
                     </form>
+                    <?php if ((int) ($u['totp_enabled'] ?? 0) === 1): ?>
+                        <span class="badge badge-contour" title="Double authentification activée">🔐 2FA</span>
+                        <form method="post" action="<?= url('/utilisateurs/' . (int) $u['id'] . '/2fa/reinitialiser') ?>" class="inline"
+                              data-confirmer="Désactiver la double authentification de <?= e($u['username']) ?> ? À utiliser si la personne a perdu son téléphone.">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn-lien rouge">Réinit. 2FA</button>
+                        </form>
+                    <?php endif; ?>
                     <?php if ((int) $u['id'] !== (int) $authUser['id']): ?>
                         <form method="post" action="<?= url('/utilisateurs/' . (int) $u['id'] . '/supprimer') ?>" class="inline"
                               data-confirmer="Supprimer définitivement l'utilisateur <?= e($u['username']) ?> ?">

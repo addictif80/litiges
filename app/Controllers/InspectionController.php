@@ -44,7 +44,7 @@ class InspectionController extends Controller
         $dossier = $service->dossier($identifiant);
 
         if ($dossier === null) {
-            flash('error', "Aucune entreprise trouvee pour « {$identifiant} ».");
+            flash('error', "Aucune entreprise trouvée pour « {$identifiant} ».");
             $this->redirect('/entreprise');
         }
 

@@ -50,11 +50,12 @@ class Notification extends Model
     }
 
     /** Evite de creer plusieurs fois la meme alerte le meme jour. */
-    public function existeDeja(int $userId, int $litigeId, string $type, string $jour): bool
+    public function existeDeja(int $userId, ?int $litigeId, string $type, string $jour): bool
     {
+        // "<=>" compare aussi les valeurs NULL (notifications sans litige).
         return Database::exists(
             'notifications',
-            'user_id = :u AND litige_id = :l AND type = :t AND DATE(created_at) = :d',
+            'user_id = :u AND litige_id <=> :l AND type = :t AND DATE(created_at) = :d',
             ['u' => $userId, 'l' => $litigeId, 't' => $type, 'd' => $jour]
         );
     }

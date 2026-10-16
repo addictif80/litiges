@@ -32,7 +32,7 @@ class ProfileController extends Controller
 
         $users = new User();
         if ($data['email'] !== '' && $users->emailExists($data['email'], $id)) {
-            $validator->custom('email', false, 'Cette adresse email est deja utilisee.');
+            $validator->custom('email', false, 'Cette adresse e-mail est déjà utilisée.');
         }
 
         if ($validator->fails()) {
@@ -43,7 +43,7 @@ class ProfileController extends Controller
         Audit::log('profil_modifie', 'user', $id, $data);
         Auth::refresh();
 
-        flash('success', 'Profil mis a jour.');
+        flash('success', 'Profil mis à jour.');
         $this->redirect('/profil');
     }
 
@@ -74,7 +74,7 @@ class ProfileController extends Controller
             }
         }
         if (mb_strlen($new) < $minLength) {
-            $errors['password'] = "Le nouveau mot de passe doit contenir au moins {$minLength} caracteres.";
+            $errors['password'] = "Le nouveau mot de passe doit contenir au moins {$minLength} caractères.";
         }
         if ($new !== $confirm) {
             $errors['password_confirm'] = 'Les mots de passe ne correspondent pas.';
@@ -88,7 +88,7 @@ class ProfileController extends Controller
         Audit::log('mot_de_passe_change', 'user', $id);
         Auth::refresh();
 
-        flash('success', 'Mot de passe modifie avec succes.');
+        flash('success', 'Mot de passe modifié avec succès.');
         $this->redirect('/');
     }
 }

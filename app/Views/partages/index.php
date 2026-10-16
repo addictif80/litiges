@@ -64,10 +64,24 @@ $peutEcrire = in_array($authUser['role'] ?? '', ['admin', 'gestionnaire'], true)
                             <div class="aide">Identifiant interne (visible dans l'URL du litige).</div>
                         </div>
                         <div class="form-groupe">
-                            <label for="expires_at">Expiration (optionnel)</label>
+                            <label for="expires_at">Expiration</label>
                             <input type="date" id="expires_at" name="expires_at">
+                            <div class="aide">
+                                <?php if (($expirationDefautJours ?? 0) > 0): ?>
+                                    Laissé vide : l'accès expire automatiquement après <?= (int) $expirationDefautJours ?> jours.
+                                <?php else: ?>
+                                    Laissé vide : l'accès n'expire pas.
+                                <?php endif; ?>
+                            </div>
+                            <label class="check"><input type="checkbox" name="sans_expiration" value="1"> Sans expiration</label>
+                        </div>
+                        <div class="form-groupe">
+                            <label for="mot_de_passe">Mot de passe (optionnel)</label>
+                            <input type="text" id="mot_de_passe" name="mot_de_passe" autocomplete="off" minlength="8" placeholder="8 caractères minimum">
+                            <div class="aide">Demandé après le code ou le lien. Communiquez-le par un autre canal.</div>
                         </div>
                     </div>
+                    <label class="check mb-2"><input type="checkbox" name="afficher_documents" value="1"> Afficher les documents que vous aurez marqués « publics » sur les litiges</label>
                     <button type="submit" class="btn">Créer le code d'accès</button>
                 </form>
             </details>
@@ -96,6 +110,38 @@ $peutEcrire = in_array($authUser['role'] ?? '', ['admin', 'gestionnaire'], true)
                     <td>
                         <strong><?= e($p['libelle']) ?></strong>
                         <div class="petit texte-doux">par <?= e($p['user_nom'] ?: '—') ?></div>
+                        <div class="petit">
+                            <?= !empty($p['mot_de_passe_hash']) ? '<span class="badge badge-contour">🔒 mot de passe</span>' : '' ?>
+                            <?= (int) ($p['afficher_documents'] ?? 0) === 1 ? '<span class="badge badge-contour">📎 documents</span>' : '' ?>
+                        </div>
+                        <?php if ($peutEcrire): ?>
+                            <details class="petit mt-1">
+                                <summary style="cursor:pointer;color:var(--bleu-600)">Sécurité / journal</summary>
+                                <form method="post" action="<?= url('/partages/' . (int) $p['id'] . '/securiser') ?>" class="mt-1">
+                                    <?= csrf_field() ?>
+                                    <div class="form-groupe">
+                                        <label>Nouveau mot de passe</label>
+                                        <input type="text" name="mot_de_passe" autocomplete="off" minlength="8" placeholder="laisser vide pour ne pas changer">
+                                    </div>
+                                    <?php if (!empty($p['mot_de_passe_hash'])): ?>
+                                        <label class="check"><input type="checkbox" name="retirer_mot_de_passe" value="1"> Retirer le mot de passe</label>
+                                    <?php endif; ?>
+                                    <label class="check"><input type="checkbox" name="afficher_documents" value="1" <?= (int) ($p['afficher_documents'] ?? 0) === 1 ? 'checked' : '' ?>> Afficher les documents « publics »</label>
+                                    <div class="form-groupe" style="max-width:220px">
+                                        <label>Prolonger de (jours)</label>
+                                        <input type="number" name="prolonger_jours" min="0" max="365" value="0">
+                                    </div>
+                                    <button type="submit" class="btn btn-petit">Enregistrer</button>
+                                </form>
+                                <?php if (!empty($journal[(int) $p['id']])): ?>
+                                    <div class="mt-1"><strong>Dernières consultations</strong>
+                                        <?php foreach ($journal[(int) $p['id']] as $c): ?>
+                                            <div class="texte-doux"><?= datetime_fr($c['created_at']) ?> · <?= e($c['action']) ?><?= $c['reference'] ? ' · ' . e($c['reference']) : '' ?> · <?= e($c['ip']) ?></div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </details>
+                        <?php endif; ?>
                     </td>
                     <td class="petit"><?= e($pm->scopeLabel($p)) ?></td>
                     <td>
@@ -135,7 +181,7 @@ $peutEcrire = in_array($authUser['role'] ?? '', ['admin', 'gestionnaire'], true)
     <?php endif; ?>
 </div>
 
-<script>
+<script nonce="<?= e(csp_nonce()) ?>">
 (function () {
     'use strict';
     var sel = document.getElementById('scope');

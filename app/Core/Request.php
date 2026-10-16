@@ -86,22 +86,59 @@ class Request
         return $_FILES[$key] ?? null;
     }
 
+    /**
+     * Adresse IP du client.
+     *
+     * Les en-tetes X-Forwarded-For / X-Real-IP ne sont pris en compte que si la
+     * requete provient d'un reverse-proxy declare dans security.trusted_proxies :
+     * sinon n'importe qui pourrait usurper son IP et contourner les limitations.
+     */
     public static function ip(): string
     {
-        $candidates = [
-            $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
-            $_SERVER['HTTP_X_REAL_IP'] ?? null,
-            $_SERVER['REMOTE_ADDR'] ?? null,
-        ];
-        foreach ($candidates as $candidate) {
-            if ($candidate) {
-                $ip = trim(explode(',', $candidate)[0]);
-                if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                    return $ip;
+        return self::resoudreIp($_SERVER, (array) Config::get('security.trusted_proxies', []));
+    }
+
+    /**
+     * @param array<string,mixed> $serveur
+     * @param string[]            $proxysDeConfiance
+     */
+    public static function resoudreIp(array $serveur, array $proxysDeConfiance): string
+    {
+        $distante = (string) ($serveur['REMOTE_ADDR'] ?? '');
+
+        if ($distante !== '' && in_array($distante, $proxysDeConfiance, true)) {
+            foreach ([$serveur['HTTP_X_FORWARDED_FOR'] ?? null, $serveur['HTTP_X_REAL_IP'] ?? null] as $candidat) {
+                if ($candidat) {
+                    $ip = trim(explode(',', (string) $candidat)[0]);
+                    if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                        return $ip;
+                    }
                 }
             }
         }
-        return '0.0.0.0';
+
+        return filter_var($distante, FILTER_VALIDATE_IP) ? $distante : '0.0.0.0';
+    }
+
+    /** La requete est-elle arrivee en HTTPS (directement ou via un proxy de confiance) ? */
+    public static function isHttps(): bool
+    {
+        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+            return true;
+        }
+        if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
+            return true;
+        }
+        $distante = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        $proxys   = (array) Config::get('security.trusted_proxies', []);
+        return $distante !== '' && in_array($distante, $proxys, true)
+            && strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    }
+
+    /** Hote de la requete (sans port), en minuscules. */
+    public static function host(): string
+    {
+        return strtolower(explode(':', (string) ($_SERVER['HTTP_HOST'] ?? ''))[0]);
     }
 
     public static function userAgent(): string

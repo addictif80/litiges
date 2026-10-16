@@ -63,12 +63,19 @@ class LitigeHistorique extends Model
             'reference_externe'    => 'Reference externe',
             'delai_relance_jours'  => 'Delai relance (j)',
             'agence_id'            => 'Agence',
+            'taux_penalite'        => 'Taux de pénalité',
+            'penalites_auto'       => 'Pénalités automatiques',
+            'penalites_depuis'     => 'Pénalités depuis',
         ];
 
         foreach ($labels as $champ => $label) {
             $old = $avant[$champ] ?? null;
             $new = $apres[$champ] ?? null;
-            if ((string) $old !== (string) $new) {
+            // Comparaison numerique : "1000.00" (base) et 1000.0 (formulaire) sont identiques.
+            $identique = is_numeric($old) && is_numeric($new)
+                ? abs((float) $old - (float) $new) < 0.005
+                : (string) $old === (string) $new;
+            if (!$identique) {
                 $this->log($litigeId, $userId, 'modification', $label, (string) $old, (string) $new);
             }
         }

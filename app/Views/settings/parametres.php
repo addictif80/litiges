@@ -261,6 +261,132 @@ $sources = (new \App\Services\CompanyLookupService())->sourcesDisponibles();
         </div>
     </div>
 
+    <div class="card" id="societe">
+        <div class="card-entete"><h3>🏢 Société et courriers</h3></div>
+        <div class="card-corps">
+            <p class="aide mb-2">Ces informations alimentent les modèles de courriers (relances, mises en demeure, déclarations de créance).</p>
+            <div class="ligne-champs">
+                <div class="form-groupe">
+                    <label for="societe_signataire">Signataire par défaut</label>
+                    <input type="text" id="societe_signataire" name="societe_signataire" value="<?= e($s('societe_signataire')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="societe_telephone">Téléphone</label>
+                    <input type="text" id="societe_telephone" name="societe_telephone" value="<?= e($s('societe_telephone')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="societe_email">E-mail</label>
+                    <input type="email" id="societe_email" name="societe_email" value="<?= e($s('societe_email')) ?>">
+                </div>
+                <div class="form-groupe">
+                    <label for="courrier_delai_jours">Délai accordé dans les mises en demeure (jours)</label>
+                    <input type="number" id="courrier_delai_jours" name="courrier_delai_jours" min="1" max="90" value="<?= e($s('courrier_delai_jours', 8)) ?>">
+                </div>
+            </div>
+            <div class="form-groupe">
+                <label for="societe_adresse">Adresse (plusieurs lignes possibles)</label>
+                <textarea id="societe_adresse" name="societe_adresse" rows="3"><?= e($s('societe_adresse')) ?></textarea>
+            </div>
+            <div class="form-groupe">
+                <label for="societe_iban">IBAN pour les règlements par virement</label>
+                <input type="text" id="societe_iban" name="societe_iban" value="<?= e($s('societe_iban')) ?>">
+            </div>
+            <a href="<?= url('/parametres/modeles') ?>" class="btn btn-secondaire btn-petit">Gérer les modèles de courriers →</a>
+        </div>
+    </div>
+
+    <div class="card" id="recouvrement">
+        <div class="card-entete"><h3>⚖️ Recouvrement : pénalités et procédures collectives</h3></div>
+        <div class="card-corps">
+            <div class="ligne-champs">
+                <div class="form-groupe">
+                    <label for="penalite_taux_annuel">Taux annuel des pénalités de retard (%)</label>
+                    <input type="text" inputmode="decimal" id="penalite_taux_annuel" name="penalite_taux_annuel" value="<?= e($s('penalite_taux_annuel', '12')) ?>">
+                    <div class="aide">À défaut de taux prévu au contrat : au moins 3 fois le taux d'intérêt légal (art. L.441-10 C. com.). Valeur à vérifier auprès de votre conseil.</div>
+                </div>
+                <div class="form-groupe">
+                    <label for="penalite_indemnite_forfaitaire">Indemnité forfaitaire de recouvrement (€)</label>
+                    <input type="text" inputmode="decimal" id="penalite_indemnite_forfaitaire" name="penalite_indemnite_forfaitaire" value="<?= e($s('penalite_indemnite_forfaitaire', '40')) ?>">
+                    <div class="aide">40 € par facture impayée entre professionnels (art. D.441-5 C. com.).</div>
+                </div>
+                <div class="form-groupe">
+                    <label for="creance_delai_mois">Délai de déclaration de créance (mois)</label>
+                    <input type="number" id="creance_delai_mois" name="creance_delai_mois" min="1" max="12" value="<?= e($s('creance_delai_mois', 2)) ?>">
+                    <div class="aide">2 mois après la publication au BODACC (4 mois si le créancier est domicilié hors de France métropolitaine) — art. R.622-24 C. com.</div>
+                </div>
+            </div>
+            <label class="check"><input type="checkbox" name="penalite_activer_cron" value="1" <?= (int) $s('penalite_activer_cron', 1) === 1 ? 'checked' : '' ?>> Recalculer chaque jour les pénalités des litiges en mode automatique (cron)</label>
+            <label class="check"><input type="checkbox" name="bodacc_surveillance_active" value="1" <?= (int) $s('bodacc_surveillance_active', 1) === 1 ? 'checked' : '' ?>> Surveiller le BODACC : alerter si un client en litige ouvre une procédure collective (cron)</label>
+            <div class="form-groupe mt-2" style="max-width:280px">
+                <label for="bodacc_surveillance_lot">Clients contrôlés par exécution du cron</label>
+                <input type="number" id="bodacc_surveillance_lot" name="bodacc_surveillance_lot" min="1" max="500" value="<?= e($s('bodacc_surveillance_lot', 40)) ?>">
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="securite-avancee">
+        <div class="card-entete"><h3>🔐 Sécurité avancée</h3></div>
+        <div class="card-corps">
+            <div class="form-groupe" style="max-width:420px">
+                <label for="2fa_obligatoire">Double authentification (2FA)</label>
+                <select id="2fa_obligatoire" name="2fa_obligatoire">
+                    <option value="0" <?= (string) $s('2fa_obligatoire', '0') === '0' ? 'selected' : '' ?>>Facultative (chaque utilisateur choisit)</option>
+                    <option value="admin" <?= $s('2fa_obligatoire') === 'admin' ? 'selected' : '' ?>>Obligatoire pour les administrateurs</option>
+                    <option value="tous" <?= $s('2fa_obligatoire') === 'tous' ? 'selected' : '' ?>>Obligatoire pour tous les utilisateurs</option>
+                </select>
+                <div class="aide">Les utilisateurs concernés sont invités à l'activer dès leur prochaine connexion. Un administrateur peut réinitialiser la 2FA d'un utilisateur qui a perdu son téléphone.</div>
+            </div>
+            <div class="form-groupe" style="max-width:420px">
+                <label for="partage_expiration_defaut_jours">Expiration par défaut des accès en lecture seule (jours)</label>
+                <input type="number" id="partage_expiration_defaut_jours" name="partage_expiration_defaut_jours" min="0" max="3650" value="<?= e($s('partage_expiration_defaut_jours', 30)) ?>">
+                <div class="aide">Appliquée aux nouveaux codes et liens de partage sans date saisie. 0 = pas d'expiration automatique.</div>
+            </div>
+            <label class="check"><input type="checkbox" name="clamav_actif" value="1" <?= (int) $s('clamav_actif', 0) === 1 ? 'checked' : '' ?>> Analyser les pièces jointes avec l'antivirus ClamAV</label>
+            <div class="ligne-champs mt-1">
+                <div class="form-groupe">
+                    <label for="clamav_adresse">Adresse du démon clamd</label>
+                    <input type="text" id="clamav_adresse" name="clamav_adresse" value="<?= e($s('clamav_adresse')) ?>" placeholder="unix:///var/run/clamav/clamd.ctl ou tcp://127.0.0.1:3310">
+                </div>
+            </div>
+            <label class="check"><input type="checkbox" name="clamav_bloquer_si_indisponible" value="1" <?= (int) $s('clamav_bloquer_si_indisponible', 1) === 1 ? 'checked' : '' ?>> Refuser les fichiers si l'antivirus est injoignable</label>
+        </div>
+    </div>
+
+    <div class="card" id="blg">
+        <div class="card-entete"><h3>🔗 ERP BLG (blgCloud)</h3></div>
+        <div class="card-corps">
+            <p class="aide mb-2">La synchronisation repose sur les exports CSV / Excel de l'ERP déposés dans un dossier surveillé (factures impayées, règlements, clients). Les noms de fichiers doivent contenir <em>facture</em>/<em>impaye</em>, <em>reglement</em>/<em>paiement</em> ou <em>client</em>.</p>
+            <label class="check"><input type="checkbox" name="blg_actif" value="1" <?= (int) $s('blg_actif', 0) === 1 ? 'checked' : '' ?>> Activer la synchronisation automatique (cron quotidien)</label>
+            <div class="form-groupe mt-2">
+                <label for="blg_dossier">Dossier surveillé</label>
+                <input type="text" id="blg_dossier" name="blg_dossier" value="<?= e($s('blg_dossier')) ?>" placeholder="blg  (relatif à storage/)  ou  /chemin/absolu/vers/exports">
+                <div class="aide">Les fichiers traités sont déplacés dans le sous-dossier <code>archive/</code>. La correspondance des colonnes se règle depuis <a href="<?= url('/import') ?>">Import de données</a> (bouton « Enregistrer comme profil BLG »).</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="rapport">
+        <div class="card-entete"><h3>📧 Rapport hebdomadaire</h3></div>
+        <div class="card-corps">
+            <label class="check"><input type="checkbox" name="rapport_hebdo_actif" value="1" <?= (int) $s('rapport_hebdo_actif', 0) === 1 ? 'checked' : '' ?>> Envoyer chaque semaine une synthèse (avec classeur Excel) — nécessite le SMTP</label>
+            <div class="ligne-champs mt-1">
+                <div class="form-groupe">
+                    <label for="rapport_hebdo_jour">Jour d'envoi</label>
+                    <select id="rapport_hebdo_jour" name="rapport_hebdo_jour">
+                        <?php foreach ([1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'] as $n => $jour): ?>
+                            <option value="<?= $n ?>" <?= (int) $s('rapport_hebdo_jour', 1) === $n ? 'selected' : '' ?>><?= $jour ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-groupe">
+                    <label for="rapport_hebdo_destinataires">Destinataires</label>
+                    <input type="text" id="rapport_hebdo_destinataires" name="rapport_hebdo_destinataires" value="<?= e($s('rapport_hebdo_destinataires', 'admin')) ?>">
+                    <div class="aide"><code>admin</code> (administrateurs), <code>tous</code> (admins + gestionnaires) ou une liste d'adresses séparées par des virgules.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-corps flex">
             <button type="submit" class="btn btn-vert">Enregistrer les paramètres</button>

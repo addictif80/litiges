@@ -29,7 +29,7 @@ class AgenceController extends Controller
         $id = (new Agence())->create($data);
         Audit::log('agence_creation', 'agence', $id, ['nom' => $data['nom']]);
 
-        flash('success', 'Agence creee.');
+        flash('success', 'Agence créée.');
         $this->redirect('/agences');
     }
 
@@ -50,7 +50,7 @@ class AgenceController extends Controller
         $agences->update((int) $id, $data);
         Audit::log('agence_modification', 'agence', (int) $id);
 
-        flash('success', 'Agence mise a jour.');
+        flash('success', 'Agence mise à jour.');
         $this->redirect('/agences');
     }
 
@@ -64,14 +64,14 @@ class AgenceController extends Controller
 
         $nb = (new Litige())->count('agence_id = :a', ['a' => (int) $id]);
         if ($nb > 0) {
-            flash('error', "Impossible de supprimer : {$nb} litige(s) sont rattaches a cette agence.");
+            flash('error', "Impossible de supprimer : {$nb} litige(s) sont rattachés à cette agence.");
             $this->redirect('/agences');
         }
 
         $agences->delete((int) $id);
         Audit::log('agence_suppression', 'agence', (int) $id, ['nom' => $agence['nom']]);
 
-        flash('success', 'Agence supprimee.');
+        flash('success', 'Agence supprimée.');
         $this->redirect('/agences');
     }
 
@@ -94,7 +94,7 @@ class AgenceController extends Controller
         $validator->required('nom')->length('nom', 2, 120)->email('email');
 
         if (!empty($data['code']) && (new Agence())->codeExists((string) $data['code'], $exceptId)) {
-            $validator->custom('code', false, 'Ce code agence est deja utilise.');
+            $validator->custom('code', false, 'Ce code agence est déjà utilisé.');
         }
         return $validator;
     }

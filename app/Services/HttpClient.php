@@ -38,6 +38,40 @@ class HttpClient
         return self::viaStreamPost($url, $payload, $headers, $timeout);
     }
 
+    /**
+     * POST sortant "durci" pour les webhooks : aucune redirection suivie et
+     * connexion epinglee sur l'adresse IP deja validee par UrlGuard.
+     *
+     * @param array<string,string> $headers
+     * @return array{status:int, body:string, error:?string, json:mixed}
+     */
+    public static function postEpingle(string $url, string $corps, string $hote, int $port, string $ip, array $headers, int $timeout = 5): array
+    {
+        if (!function_exists('curl_init')) {
+            return self::pack(0, '', 'cURL est requis pour les webhooks.');
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => min(5, $timeout),
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $corps,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_USERAGENT      => 'Locavente-Litiges-Webhook/1.0',
+            CURLOPT_HTTPHEADER     => self::fusionnerEntetes(['Content-Type: application/json'], $headers),
+            CURLOPT_RESOLVE        => [$hote . ':' . $port . ':' . $ip],
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+        $body   = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error  = curl_errno($ch) ? curl_error($ch) : null;
+        curl_close($ch);
+
+        return self::pack($status, $body === false ? '' : mb_substr((string) $body, 0, 2000), $error);
+    }
+
     private static function viaCurlPost(string $url, string $payload, array $headers, int $timeout): array
     {
         $ch = curl_init($url);

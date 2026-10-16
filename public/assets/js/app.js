@@ -434,4 +434,117 @@
     }
 
     window.addEventListener('DOMContentLoaded', initPWA);
+
+    // --- Impression (remplace les onclick inline, interdits par la CSP) ---
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-imprimer]')) {
+            e.preventDefault();
+            window.print();
+        }
+    });
+
+    // --- Selection automatique d'un champ en lecture seule (adresses a copier) ---
+    document.addEventListener('focusin', function (e) {
+        if (e.target.matches && e.target.matches('[data-selectionner]')) {
+            e.target.select();
+        }
+    });
+
+    // --- Affichage conditionnel de blocs selon un <select> ---
+    document.addEventListener('change', function (e) {
+        const select = e.target.closest('[data-bloc-switch]');
+        if (!select) return;
+        const portee = select.closest('[data-bloc-scope]') || select.form;
+        if (!portee) return;
+        const valeur = select.value;
+        portee.querySelectorAll('[data-bloc]').forEach(function (bloc) {
+            bloc.hidden = (bloc.getAttribute('data-bloc') !== valeur);
+        });
+    });
+
+    // --- Selecteur de client avec recherche asynchrone ---
+    // <div data-client-picker data-nom="client_id" data-valeur="12" data-libelle="ACME">
+    function initClientPickers() {
+        document.querySelectorAll('[data-client-picker]').forEach(function (zone) {
+            const nom = zone.getAttribute('data-nom') || 'client_id';
+            const requis = zone.hasAttribute('data-requis');
+            const champ = document.createElement('input');
+            champ.type = 'search';
+            champ.placeholder = 'Rechercher un client (nom, SIREN, ville)…';
+            champ.autocomplete = 'off';
+            champ.value = zone.getAttribute('data-libelle') || '';
+            const cache = document.createElement('input');
+            cache.type = 'hidden';
+            cache.name = nom;
+            cache.value = zone.getAttribute('data-valeur') || '';
+            const liste = document.createElement('div');
+            liste.className = 'picker-resultats';
+            liste.hidden = true;
+            zone.appendChild(champ);
+            zone.appendChild(cache);
+            zone.appendChild(liste);
+
+            let minuteur = null;
+            champ.addEventListener('input', function () {
+                cache.value = '';
+                clearTimeout(minuteur);
+                const q = champ.value.trim();
+                if (q.length < 2) { liste.hidden = true; return; }
+                minuteur = setTimeout(function () {
+                    fetch(zone.getAttribute('data-url') + '?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (items) {
+                            liste.innerHTML = '';
+                            if (!items.length) {
+                                const vide = document.createElement('div');
+                                vide.className = 'item texte-doux';
+                                vide.textContent = 'Aucun client trouvé.';
+                                liste.appendChild(vide);
+                            }
+                            items.forEach(function (c) {
+                                const el = document.createElement('div');
+                                el.className = 'item';
+                                el.textContent = c.libelle;
+                                el.addEventListener('click', function () {
+                                    cache.value = c.id;
+                                    champ.value = c.libelle;
+                                    liste.hidden = true;
+                                });
+                                liste.appendChild(el);
+                            });
+                            liste.hidden = false;
+                        })
+                        .catch(function () { liste.hidden = true; });
+                }, 250);
+            });
+            if (requis && champ.form) {
+                champ.form.addEventListener('submit', function (ev) {
+                    if (!cache.value) {
+                        ev.preventDefault();
+                        champ.setCustomValidity('Sélectionnez un client dans la liste.');
+                        champ.reportValidity();
+                        champ.setCustomValidity('');
+                    }
+                });
+            }
+        });
+    }
+    window.addEventListener('DOMContentLoaded', initClientPickers);
+
+    // --- Actions groupees : tout cocher / compteur ---
+    document.addEventListener('change', function (e) {
+        const tout = e.target.closest('[data-cocher-tout]');
+        if (tout) {
+            document.querySelectorAll('input[name="ids[]"]').forEach(function (c) { c.checked = tout.checked; });
+        }
+        if (tout || e.target.matches('input[name="ids[]"]')) {
+            const n = document.querySelectorAll('input[name="ids[]"]:checked').length;
+            const barre = document.querySelector('[data-barre-groupee]');
+            if (barre) {
+                barre.hidden = n === 0;
+                const compteur = barre.querySelector('[data-nb-selection]');
+                if (compteur) compteur.textContent = String(n);
+            }
+        }
+    });
 })();

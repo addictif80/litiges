@@ -24,9 +24,20 @@ try {
             0
         );
         $nbMessagesNonLus = \App\Core\Auth::peut('chat') ? (new \App\Models\Chat())->nonLus((int) $authUser['id'], \App\Core\Auth::agenceId(), \App\Core\Auth::isAdmin()) : 0;
+        $nbTachesRetard = \App\Core\Auth::peut('litiges') ? (new \App\Models\Tache())->compterEnRetard((int) $authUser['id']) : 0;
     }
 } catch (\Throwable $e) {
     // Pas bloquant pour l'affichage.
+}
+
+// Migrations en attente alors que l'application automatique est desactivee (admin uniquement).
+$migrationsEnAttente = false;
+if ($authUser && ($authUser['role'] ?? '') === 'admin' && !(bool) \App\Core\Config::get('app.auto_migrate', true)) {
+    try {
+        $migrationsEnAttente = (new \App\Core\Migrator())->enAttenteRapide();
+    } catch (\Throwable $e) {
+        $migrationsEnAttente = false;
+    }
 }
 
 $estAdmin = \App\Core\Auth::isAdmin();
@@ -90,6 +101,22 @@ $icones = [
                 </a>
             <?php endif; ?>
 
+            <?php if (\App\Core\Auth::peut('litiges')): ?>
+            <a href="<?= url('/taches') ?>" class="<?= is_active_menu('/taches') ?>">
+                <span class="ic">✅</span> Tâches
+                <?php if (!empty($nbTachesRetard)): ?><span class="badge-nb"><?= (int) $nbTachesRetard ?></span><?php endif; ?>
+            </a>
+            <a href="<?= url('/rapports') ?>" class="<?= is_active_menu('/rapports') ?>">
+                <span class="ic">📈</span> Rapports &amp; prévisions
+            </a>
+            <?php endif; ?>
+
+            <?php if ($peutEcrire && \App\Core\Auth::peut('litiges') && \App\Core\Auth::peut('clients')): ?>
+            <a href="<?= url('/import') ?>" class="<?= is_active_menu('/import') ?>">
+                <span class="ic">⬆</span> Import de données
+            </a>
+            <?php endif; ?>
+
             <a href="<?= url('/presentation') ?>" class="<?= is_active_menu('/presentation') ?>">
                 <span class="ic">📽️</span> Présentation
             </a>
@@ -124,6 +151,15 @@ $icones = [
                 <a href="<?= url('/parametres') ?>" class="<?= $currentPath === '/parametres' ? 'is-active' : '' ?>">
                     <span class="ic"><?= $icones['parametres'] ?></span> Paramètres
                 </a>
+                <a href="<?= url('/parametres/modeles') ?>" class="<?= is_active_menu('/parametres/modeles') ?>">
+                    <span class="ic">📄</span> Modèles de courriers
+                </a>
+                <a href="<?= url('/parametres/integrations') ?>" class="<?= is_active_menu('/parametres/integrations') ?>">
+                    <span class="ic">🔌</span> API &amp; webhooks
+                </a>
+                <a href="<?= url('/rgpd') ?>" class="<?= is_active_menu('/rgpd') ?>">
+                    <span class="ic">🛡️</span> RGPD
+                </a>
                 <a href="<?= url('/parametres/migrations') ?>" class="<?= is_active_menu('/parametres/migrations') ?>">
                     <span class="ic">🗄️</span> Base de données
                 </a>
@@ -133,7 +169,7 @@ $icones = [
             <?php endif; ?>
         </nav>
         <div style="padding:14px 18px;font-size:11.5px;color:#7fa2c7;border-top:1px solid rgba(255,255,255,.1)">
-            Version 1.0 · <?= date('Y') ?>
+            Version 1.1 · <?= date('Y') ?>
         </div>
     </aside>
 
@@ -176,6 +212,12 @@ $icones = [
         </header>
 
         <div class="contenu">
+            <?php if ($migrationsEnAttente): ?>
+                <div class="alertes"><div class="alerte alerte-warning">
+                    Des migrations de base de données sont en attente. Lancez <code>php cron/migrate.php</code> sur le serveur
+                    ou <a href="<?= url('/parametres/migrations') ?>">appliquez-les depuis l'administration</a>.
+                </div></div>
+            <?php endif; ?>
             <?php if (!empty($flash)): ?>
                 <div class="alertes">
                     <?php foreach ($flash as $type => $messages): ?>

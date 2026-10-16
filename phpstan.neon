@@ -1,0 +1,11 @@
+parameters:
+    level: 1
+    paths:
+        - app
+    excludePaths:
+        - app/Resources
+        - app/Views
+    treatPhpDocCommentsAsPhpDoc: true
+    # Les fonctions utilitaires (helpers.php) sont chargees par Composer.
+    bootstrapFiles:
+        - app/helpers.php

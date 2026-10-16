@@ -15,7 +15,11 @@ return [
         'url'       => 'https://litiges.mondomaine.fr', // URL de base SANS slash final
         'timezone'  => 'Europe/Paris',
         'locale'    => 'fr_FR',
-        'key'       => 'CHANGEZ-MOI-chaine-aleatoire-64-caracteres',
+        'key'       => 'CHANGEZ-MOI-chaine-aleatoire-64-caracteres', // chiffre les secrets en base (2FA, webhooks) : ne plus la changer ensuite
+        // Migrations de base de donnees :
+        //   true  = appliquees automatiquement au chargement des pages (pratique, mais une requete web modifie la base)
+        //   false = a lancer a la main apres chaque mise a jour : php cron/migrate.php  (recommande en production)
+        'auto_migrate' => false,
     ],
 
     // --- Base de donnees ----------------------------------------------
@@ -49,7 +53,18 @@ return [
         'max_login_attempts'  => 5,
         'lockout_minutes'     => 15,
         'password_min_length' => 10,
-        'force_https'         => true,
+        'force_https'         => true,   // redirige http -> https (hors localhost) et envoie HSTS
+        // Adresses IP des reverse-proxies / CDN dont on accepte X-Forwarded-For (sinon vide).
+        // Indispensable pour que la limitation de tentatives voie la vraie IP du visiteur derriere un proxy.
+        'trusted_proxies'     => [],
+        // Content-Security-Policy : 'enforce' (defaut) | 'report-only' | 'off' (en cas de probleme d'affichage)
+        'csp'                 => 'enforce',
+    ],
+
+    // --- Integrations (webhooks) ---------------------------------------
+    'integrations' => [
+        'autoriser_http'          => false, // accepter des webhooks en http:// (deconseille)
+        'autoriser_reseau_prive'  => false, // accepter des webhooks vers 10.x / 192.168.x / localhost (deconseille)
     ],
 
     // --- APIs entreprises ---------------------------------------------

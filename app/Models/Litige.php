@@ -15,7 +15,57 @@ class Litige extends Model
         'responsable_id', 'priorite', 'numero_facture', 'date_facture', 'numero_contrat',
         'materiel', 'reference_externe', 'prochaine_relance_at', 'delai_relance_jours',
         'derniere_relance_at', 'created_by',
+        'penalites_auto', 'taux_penalite', 'indemnite_forfaitaire', 'penalites_depuis',
+        'penalites_calculees_le', 'creance_declaree_le',
     ];
+
+    /** Criteres de tri combinables (tri=priorite,echeance). */
+    private const TRIS = [
+        'recent'      => 'l.date_ouverture DESC, l.id DESC',
+        'ancien'      => 'l.date_ouverture ASC',
+        'montant'     => 'encours DESC',
+        'montant_asc' => 'encours ASC',
+        'client'      => 'c.raison_sociale ASC',
+        'echeance'    => 'l.date_echeance IS NULL, l.date_echeance ASC',
+        'priorite'    => "FIELD(l.priorite,'critique','haute','normale','basse') ASC",
+        'relance'     => 'l.prochaine_relance_at IS NULL, l.prochaine_relance_at ASC',
+        'statut'      => 's.ordre ASC',
+        'reference'   => 'l.reference ASC',
+    ];
+
+    /**
+     * Litiges potentiellement en doublon : meme client et meme numero de
+     * facture, ou meme numero de contrat pour un montant identique.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function doublons(int $clientId, ?string $numeroFacture, ?string $numeroContrat, float $montant, ?int $sauf = null): array
+    {
+        $conds  = [];
+        $params = ['client' => $clientId];
+
+        if ($numeroFacture !== null && trim($numeroFacture) !== '') {
+            $conds[] = 'l.numero_facture = :facture';
+            $params['facture'] = trim($numeroFacture);
+        }
+        if ($numeroContrat !== null && trim($numeroContrat) !== '' && $montant > 0) {
+            $conds[] = '(l.numero_contrat = :contrat AND ABS(l.montant_principal - :montant) < 0.01)';
+            $params['contrat']  = trim($numeroContrat);
+            $params['montant']  = $montant;
+        }
+        if ($conds === []) {
+            return [];
+        }
+
+        $sql = 'SELECT l.id, l.reference, l.objet, l.numero_facture, l.montant_principal, s.libelle AS statut_libelle
+                FROM litiges l JOIN litige_statuts s ON s.id = l.statut_id
+                WHERE l.client_id = :client AND (' . implode(' OR ', $conds) . ')';
+        if ($sauf !== null) {
+            $sql .= ' AND l.id <> :sauf';
+            $params['sauf'] = $sauf;
+        }
+        return Database::fetchAll($sql . ' LIMIT 5', $params);
+    }
 
     private const SELECT_BASE = "
         SELECT l.*,
@@ -52,8 +102,6 @@ class Litige extends Model
     {
         [$where, $params] = $this->buildWhere($f);
 
-        $enable = [];
-
         $total = (int) Database::value(
             "SELECT COUNT(*) FROM litiges l
              JOIN clients c ON c.id = l.client_id
@@ -68,7 +116,7 @@ class Litige extends Model
         $offset = ($page - 1) * $perPage;
 
         $rows = Database::fetchAll(
-            self::SELECT_BASE . " WHERE {$where} ORDER BY {$this->orderBy($f)} LIMIT {$perPage} OFFSET {$offset}",
+            self::SELECT_BASE . " WHERE {$where} ORDER BY " . self::orderBy($f) . " LIMIT {$perPage} OFFSET {$offset}",
             $params
         );
 
@@ -80,17 +128,43 @@ class Litige extends Model
         ];
     }
 
-    private function orderBy(array $f): string
+    /**
+     * Tous les litiges correspondant aux filtres (sans pagination) pour les exports.
+     * @return array<int,array<string,mixed>>
+     */
+    public function pourExport(array $f, int $limite = 10000): array
     {
-        return match ($f['tri'] ?? 'recent') {
-            'ancien'      => 'l.date_ouverture ASC',
-            'montant'     => 'encours DESC',
-            'montant_asc' => 'encours ASC',
-            'client'      => 'c.raison_sociale ASC',
-            'echeance'    => 'l.date_echeance ASC',
-            'priorite'    => "FIELD(l.priorite,'critique','haute','normale','basse') ASC",
-            default       => 'l.date_ouverture DESC, l.id DESC',
-        };
+        [$where, $params] = $this->buildWhere($f);
+        return Database::fetchAll(
+            self::SELECT_BASE . " WHERE {$where} ORDER BY " . self::orderBy($f) . ' LIMIT ' . max(1, min(50000, $limite)),
+            $params
+        );
+    }
+
+    /** Clause ORDER BY a partir d'une liste de criteres separes par des virgules (liste blanche). */
+    public static function orderBy(array $f): string
+    {
+        $clauses = [];
+        foreach (explode(',', (string) ($f['tri'] ?? 'recent')) as $critere) {
+            $critere = trim($critere);
+            if (isset(self::TRIS[$critere])) {
+                $clauses[] = self::TRIS[$critere];
+            }
+        }
+        if ($clauses === []) {
+            $clauses[] = self::TRIS['recent'];
+        }
+        return implode(', ', array_unique($clauses));
+    }
+
+    /** @return array<string,string> critere => libelle (pour les formulaires) */
+    public static function criteresDeTri(): array
+    {
+        return [
+            'recent' => 'Plus récents', 'ancien' => 'Plus anciens', 'montant' => 'Encours décroissant',
+            'montant_asc' => 'Encours croissant', 'echeance' => 'Échéance', 'relance' => 'Prochaine relance',
+            'client' => 'Client', 'priorite' => 'Priorité', 'statut' => 'Statut', 'reference' => 'Référence',
+        ];
     }
 
     /** @return array{0:string,1:array} */

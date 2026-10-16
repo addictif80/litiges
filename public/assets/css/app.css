@@ -471,3 +471,20 @@ main-bloc { display: block; }
     .main { margin-left: 0; }
     .card { box-shadow: none; border-color: #ccc; }
 }
+
+/* --- Selecteur de client (recherche asynchrone) --- */
+[data-client-picker] { position: relative; }
+.picker-resultats {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 40;
+    background: var(--blanc, #fff); border: 1px solid var(--bordure, #dde3ec); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(15, 35, 65, .14); max-height: 260px; overflow: auto; margin-top: 2px;
+}
+.picker-resultats .item { padding: 9px 12px; cursor: pointer; font-size: 14px; }
+.picker-resultats .item:hover { background: #eef4fb; }
+
+/* --- Mentions @identifiant dans les notes --- */
+.mention { background: #e8f1fb; color: #12467b; border-radius: 4px; padding: 0 4px; font-weight: 600; }
+
+/* --- Actions groupees --- */
+[data-barre-groupee] { position: sticky; top: 8px; z-index: 30; border-left: 4px solid var(--bleu-600, #0f7bff); }
+[data-barre-groupee][hidden] { display: none; }

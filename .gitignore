@@ -2,6 +2,10 @@
 /storage/logs/*.log
 /storage/logs/*.json
 /storage/migrations.state
+/storage/imports/*
+/storage/blg/
+/composer.lock
+/.phpunit.cache/
 /storage/uploads/*
 !/storage/uploads/.gitkeep
 /vendor/

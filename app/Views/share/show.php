@@ -29,7 +29,7 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
         </div>
     </div>
     <div class="flex no-print">
-        <button type="button" class="btn btn-secondaire" onclick="window.print()">🖨 Imprimer</button>
+        <button type="button" class="btn btn-secondaire" data-imprimer>🖨 Imprimer</button>
         <a href="<?= url('/partage/consultation') ?>" class="btn btn-secondaire">&larr; Retour</a>
     </div>
 </div>
@@ -59,8 +59,8 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
                         ?>
                         <div class="timeline-item <?= $classe ?>">
                             <div class="tl-entete">
-                                <span class="tl-titre"><?= e(\App\Models\Relance::TYPES[$r['type_action']] ?? $r['type_action']) ?></span>
-                                <span class="badge badge-contour"><?= e(\App\Models\Relance::CANAUX[$r['canal']] ?? $r['canal']) ?></span>
+                                <span class="tl-titre"><?= e(\App\Enums\TypeAction::tryFrom($r['type_action'])?->label() ?? $r['type_action']) ?></span>
+                                <span class="badge badge-contour"><?= e(\App\Enums\CanalAction::tryFrom($r['canal'])?->label() ?? $r['canal']) ?></span>
                                 <span class="tl-date"><?= datetime_fr($r['date_action']) ?></span>
                             </div>
                             <?php if ($r['objet']): ?><div class="gras petit" style="margin-top:3px"><?= e($r['objet']) ?></div><?php endif; ?>
@@ -95,6 +95,20 @@ $retardRelance = !empty($litige['prochaine_relance_at']) && !$cloture
                 </dl>
             </div>
         </div>
+
+        <?php if (!empty($documents)): ?>
+            <div class="card mt-2 no-print">
+                <div class="card-entete"><h3>Documents mis à disposition</h3></div>
+                <div class="card-corps">
+                    <?php foreach ($documents as $d): ?>
+                        <div style="padding:6px 0;border-bottom:1px solid #eef2f7">
+                            📎 <a href="<?= url('/partage/consultation/' . (int) $litige['id'] . '/documents/' . (int) $d['id']) ?>"><?= e($d['nom_original']) ?></a>
+                            <?php if ($d['categorie']): ?><span class="puce-doc"><?= e($d['categorie']) ?></span><?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <?php if (!empty($clientNotes)): ?>
             <div class="card mt-2 no-print">

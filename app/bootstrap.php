@@ -55,6 +55,7 @@ if (Config::isDebug()) {
 }
 
 set_exception_handler(static function (\Throwable $e): void {
+    \App\Core\Logger::exception($e);
     try {
         \App\Core\Audit::log('exception', null, null, [
             'message' => $e->getMessage(),
@@ -75,6 +76,10 @@ set_exception_handler(static function (\Throwable $e): void {
             . '<h1>Une erreur est survenue</h1><p>L\'incident a ete enregistre. Merci de contacter l\'administrateur.</p></body></html>';
     }
 });
+
+// --- En-tetes de securite / HTTPS ------------------------------------
+\App\Core\SecurityHeaders::forcerHttps();
+\App\Core\SecurityHeaders::envoyer();
 
 // --- Base de donnees --------------------------------------------------
 Database::init((array) Config::get('db', []));

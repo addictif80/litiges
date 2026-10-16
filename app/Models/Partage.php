@@ -10,7 +10,70 @@ class Partage extends Model
     protected string $table = 'partages';
     protected array $fillable = [
         'code', 'token', 'libelle', 'scope', 'scope_id', 'expires_at', 'actif', 'created_by', 'last_used_at', 'vues',
+        'mot_de_passe_hash', 'afficher_documents',
     ];
+
+    /** Partage de type "litige" le plus recent pour ce litige. */
+    public function dernierPourLitige(int $litigeId): ?array
+    {
+        return Database::fetch(
+            "SELECT * FROM partages WHERE scope = 'litige' AND scope_id = :id ORDER BY id DESC LIMIT 1",
+            ['id' => $litigeId]
+        );
+    }
+
+    /** Trace une consultation publique (acces, litige consulte, document telecharge...). */
+    public function journaliser(int $partageId, string $action, ?int $litigeId = null): void
+    {
+        try {
+            Database::insert('partage_consultations', [
+                'partage_id' => $partageId,
+                'litige_id'  => $litigeId,
+                'action'     => mb_substr($action, 0, 30),
+                'ip'         => \App\Core\Request::ip(),
+                'user_agent' => \App\Core\Request::userAgent(),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Core\Logger::exception($e, 'Journal des consultations');
+        }
+    }
+
+    /**
+     * Dernieres consultations de chaque partage.
+     *
+     * @param int[] $ids
+     * @return array<int,array<int,array<string,mixed>>> partage_id => lignes (les plus recentes d'abord)
+     */
+    public function journalPar(array $ids, int $parPartage = 8): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $marqueurs = implode(',', array_fill(0, count($ids), '?'));
+        $lignes = Database::run(
+            "SELECT c.*, l.reference
+             FROM partage_consultations c LEFT JOIN litiges l ON l.id = c.litige_id
+             WHERE c.partage_id IN ({$marqueurs})
+             ORDER BY c.id DESC LIMIT 600",
+            array_values(array_map('intval', $ids))
+        )->fetchAll();
+
+        $groupes = [];
+        foreach ($lignes as $l) {
+            $pid = (int) $l['partage_id'];
+            if (count($groupes[$pid] ?? []) < $parPartage) {
+                $groupes[$pid][] = $l;
+            }
+        }
+        return $groupes;
+    }
+
+    /** Expiration par defaut des nouveaux partages (parametre, en jours ; 0 = jamais). */
+    public static function expirationParDefaut(): ?string
+    {
+        $jours = (int) \App\Core\Settings::get('partage_expiration_defaut_jours', 30);
+        return $jours > 0 ? date('Y-m-d 23:59:59', strtotime("+{$jours} days")) : null;
+    }
 
     public const SCOPES = [
         'global' => 'Tous les litiges',
@@ -65,7 +128,12 @@ class Partage extends Model
     public function generateCode(): string
     {
         do {
-            $code = strtoupper(substr(str_replace(['+', '/', '='], '', base64_encode(random_bytes(9))), 0, 10));
+            // 14 caracteres alphanumeriques (~80 bits) : non devinable meme sans limitation.
+            $code = '';
+            while (strlen($code) < 14) {
+                $code .= strtoupper(str_replace(['+', '/', '=', 'O', '0', 'I', '1', 'l'], '', base64_encode(random_bytes(12))));
+            }
+            $code = substr($code, 0, 14);
         } while ($this->codeExists($code));
         return $code;
     }

@@ -33,7 +33,7 @@ class Validator
         $len   = mb_strlen($value);
         if ($len < $min || ($max !== null && $len > $max)) {
             $this->errors[$field] = $message ?? sprintf(
-                '%s doit contenir entre %d et %s caracteres.',
+                '%s doit contenir entre %d et %s caractères.',
                 $this->label($field),
                 $min,
                 $max ?? '∞'
@@ -55,7 +55,7 @@ class Validator
     {
         $value = $this->value($field);
         if ($value !== null && $value !== '' && !is_numeric(str_replace([' ', ','], ['', '.'], (string) $value))) {
-            $this->errors[$field] = $message ?? $this->label($field) . ' doit etre numerique.';
+            $this->errors[$field] = $message ?? $this->label($field) . ' doit être numérique.';
         }
         return $this;
     }
@@ -64,7 +64,7 @@ class Validator
     {
         $value = (string) ($this->value($field) ?? '');
         if ($value !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            $this->errors[$field] = $message ?? 'La date doit etre au format AAAA-MM-JJ.';
+            $this->errors[$field] = $message ?? 'La date doit être au format AAAA-MM-JJ.';
         }
         return $this;
     }

@@ -22,21 +22,31 @@ reste disponible en option si une clé API est fournie.
 2. [Prérequis](#prérequis)
 3. [Installation](#installation)
 4. [Mise à jour d'une installation existante](#mise-à-jour-dune-installation-existante)
-   - [Migrations automatiques](#migrations-automatiques)
+   - [Migrations](#migrations)
 5. [Configuration](#configuration)
-6. [Tâche planifiée (cron)](#tâche-planifiée-cron)
+6. [Tâches planifiées (cron)](#tâches-planifiées-cron)
 7. [Sources de données entreprises](#sources-de-données-entreprises)
 8. [Inspection d'une entreprise](#inspection-dune-entreprise)
 9. [Rôles et permissions](#rôles-et-permissions)
-10. [Messagerie interne](#messagerie-interne)
-11. [Notes client](#notes-client)
-12. [Analyse de confiance (IA 1min.ai)](#analyse-de-confiance-ia-1minai)
-13. [Accès en lecture seule (agences)](#accès-en-lecture-seule-agences)
-14. [Notifications](#notifications)
-15. [Sécurité](#sécurité)
-16. [Structure du projet](#structure-du-projet)
-17. [Sauvegarde et maintenance](#sauvegarde-et-maintenance)
-18. [Dépannage](#dépannage)
+10. [Recouvrement : paiements, échéancier, pénalités](#recouvrement--paiements-échéancier-pénalités)
+11. [Courriers et suivi d'envoi](#courriers-et-suivi-denvoi)
+12. [Workflow par statut](#workflow-par-statut)
+13. [Procédures collectives et déclaration de créance](#procédures-collectives-et-déclaration-de-créance)
+14. [Import de données et ERP BLG](#import-de-données-et-erp-blg)
+15. [Rapports et prévisions](#rapports-et-prévisions)
+16. [Tâches, filtres enregistrés, actions groupées](#tâches-filtres-enregistrés-actions-groupées)
+17. [API REST, webhooks et agenda iCal](#api-rest-webhooks-et-agenda-ical)
+18. [Messagerie interne](#messagerie-interne)
+19. [Notes client](#notes-client)
+20. [Analyse de confiance (IA 1min.ai)](#analyse-de-confiance-ia-1minai)
+21. [Accès en lecture seule (agences)](#accès-en-lecture-seule-agences)
+22. [Notifications](#notifications)
+23. [Sécurité](#sécurité)
+24. [RGPD](#rgpd)
+25. [Structure du projet](#structure-du-projet)
+26. [Tests et intégration continue](#tests-et-intégration-continue)
+27. [Sauvegarde et maintenance](#sauvegarde-et-maintenance)
+28. [Dépannage](#dépannage)
 
 ---
 
@@ -77,6 +87,22 @@ reste disponible en option si une clé API est fournie.
   note sur un litige et nouveau message (ce dernier réservé aux personnes concernées).
 - **Accès lecture seule** pour les agences via un **code d'accès**, sans création de compte.
 - **API JSON interne** pour l'auto-complétion des entreprises.
+- **Journal des paiements** (le montant récupéré en est la somme), **échéanciers** avec imputation
+  automatique, **pénalités de retard** calculées chaque jour (intérêts + indemnité forfaitaire).
+- **Courriers types** (relance, mise en demeure, échéancier, déclaration de créance) avec fusion de
+  variables, impression / Word / PDF, **suivi d'envoi et d'accusé de réception**.
+- **Workflow par statut** : transitions autorisées et pré-requis (mise en demeure, AR reçu, échéancier…).
+- **Surveillance BODACC** planifiée et **délai de déclaration de créance** en cas de procédure collective.
+- **Import CSV / Excel** (clients, factures impayées, règlements) et **synchronisation avec l'ERP BLG**
+  par dépôt de fichiers, avec rapprochement automatique des règlements.
+- **Rapports** : balance âgée, recouvrement par agence et par mois, prévisions d'encaissement,
+  **rapport hebdomadaire par e-mail** avec classeur Excel.
+- **Tâches** assignables, **filtres enregistrés**, **actions groupées**, tri multi-critères,
+  **mentions @** dans les notes, détection de **doublons**.
+- **API REST** à jetons, **webhooks** signés, **agenda iCal** (Outlook, Google, Apple).
+- **Sécurité renforcée** : double authentification (TOTP), limitation de tentatives, en-têtes CSP/HSTS,
+  contrôle du contenu des fichiers, antivirus ClamAV optionnel.
+- **RGPD** : registre des traitements, durées de conservation, export et anonymisation d'un contact.
 - **Présentation intégrée** : un diaporama (menu « Présentation », page `/presentation`) qui
   décrit les fonctionnalités du panel — navigation clavier, plein écran, vue d'ensemble,
   impression/export PDF.
@@ -85,10 +111,12 @@ reste disponible en option si une clé API est fournie.
 
 ## Prérequis
 
-- **PHP 8.0+** avec les extensions `pdo`, `pdo_mysql`, `json`, `mbstring`, `openssl`.
+- **PHP 8.1+** avec les extensions `pdo`, `pdo_mysql`, `json`, `mbstring`, `openssl`.
+- Recommandées : `zip` (exports et imports Excel), `curl` (API entreprises, webhooks), `fileinfo`
+  (contrôle du contenu des pièces jointes), `dom` (nettoyage des modèles de courriers).
 - **MySQL 8** ou **MariaDB 10.4+**.
 - Un serveur web (Apache, Nginx, LiteSpeed/CyberPanel…) qui pointe vers le dossier `public/`.
-- Facultatif : **Composer** (pour PHPMailer, utilisé si l'envoi d'emails est activé).
+- Facultatif : **Composer** (PHPMailer pour le SMTP ; `dompdf/dompdf` pour de vrais fichiers PDF).
 
 Vérifié par l'installeur : l'écran d'installation liste les extensions manquantes le cas échéant.
 
@@ -160,41 +188,40 @@ et crée l'administrateur.
 
 ## Mise à jour d'une installation existante
 
-Les évolutions de la base de données sont appliquées **automatiquement** : à chaque
-chargement de page, l'application exécute les fichiers présents dans
-`database/migrations/` qui n'ont pas encore été joués (suivi dans la table `migrations`) :
-
 ```bash
 git pull
+composer install --no-dev --optimize-autoloader   # si vous utilisez Composer
+php cron/migrate.php                              # applique les évolutions de la base
 ```
 
-C'est tout : aucune commande SQL à lancer. Le mécanisme est décrit plus bas
-(voir [Migrations automatiques](#migrations-automatiques)).
+> Cette version requiert **PHP 8.1 ou plus** et ajoute de nouvelles tables (paiements, échéances,
+> courriers, tâches, API…). Faites une **sauvegarde de la base** avant la première mise à jour.
 
 > Pour forcer une reprise (droits MySQL corrigés, base restaurée, etc.), ouvrez
 > **Administration → Base de données** et cliquez sur « Appliquer maintenant ».
 
-> Pour une **installation neuve**, `database/schema.sql` contient déjà tout : aucune
-> migration n'est nécessaire (elles sont simplement marquées comme appliquées).
+> Pour une **installation neuve**, l'installeur importe `database/schema.sql` puis applique lui-même
+> toutes les migrations.
 
-### Migrations automatiques
+### Migrations
 
-Le suivi est géré par `app/Core/Migrator.php`, appelé au chargement de chaque page :
+Le suivi est géré par `app/Core/Migrator.php` (table `migrations`). Deux modes, réglés par
+`app.auto_migrate` dans `config/config.php` :
 
-1. il compare l'empreinte des fichiers de `database/migrations/` à celle mémorisée dans
-   `storage/migrations.state` ; si rien n'a changé, **aucune requête SQL** n'est faite ;
-2. sinon, il exécute les fichiers non encore enregistrés dans la table `migrations`.
+| Mode | Fonctionnement |
+|---|---|
+| `true` (valeur par défaut si la clé est absente, donc **mises à jour compatibles**) | les migrations en attente sont appliquées automatiquement au chargement d'une page. Pratique, mais une requête web peut modifier la structure de la base. |
+| `false` (**recommandé en production**, valeur du nouveau `config.example.php`) | aucune migration depuis une requête web : lancez `php cron/migrate.php` après chaque mise à jour (`--status` pour voir l'état). Une bannière prévient les administrateurs si des migrations sont en attente. |
 
-**Ajouter une évolution** (table, colonne, données de référence…) revient donc à déposer un
-fichier `database/migrations/AAAA-MM-JJ-description.sql` et à faire un `git pull`.
-
-Règles d'écriture :
+**Ajouter une évolution** : déposez un fichier dans `database/migrations/` nommé `AAAA-MM-JJ-NN-description.sql`
+ou `.php`. Les migrations `.php` retournent une fonction `(PDO $pdo): void` et disposent des aides
+`App\Core\Schema` (`ajouterColonne`, `ajouterIndex`…), ce qui évite les procédures stockées.
 
 | Règle | Détail |
 |---|---|
-| Un fichier = une évolution | nommé `AAAA-MM-JJ-description.sql` ; l'ordre alphabétique fait foi. |
-| SQL simple | instructions séparées par `;`. **Pas de `DELIMITER` ni de procédures stockées.** |
-| Idempotent | la migration peut être relancée après une erreur partielle : `CREATE TABLE IF NOT EXISTS`, garde via `information_schema`, `INSERT … ON DUPLICATE KEY UPDATE`, etc. |
+| Un fichier = une évolution | l'ordre alphabétique fait foi. |
+| SQL simple (`.sql`) | instructions séparées par `;`. **Pas de `DELIMITER` ni de procédures stockées.** |
+| Idempotent | la migration peut être relancée après une erreur partielle (`CREATE TABLE IF NOT EXISTS`, `Schema::ajouterColonne`, `ON DUPLICATE KEY UPDATE`…). |
 | Ne jamais modifier une migration déjà appliquée | elle ne sera pas rejouée : créez-en une nouvelle. |
 | Droits MySQL | l'utilisateur doit pouvoir `CREATE` / `ALTER` / `INDEX`. |
 
@@ -216,7 +243,13 @@ Principales clés :
 | `app.url` | URL de base (sans slash final). |
 | `app.timezone` / `app.locale` | Fuseau horaire et locale (`Europe/Paris`, `fr_FR`). |
 | `db.*` | Connexion MySQL. |
+| `app.key` | Clé qui chiffre les secrets en base (2FA, webhooks). **Ne plus la modifier** une fois l'application utilisée. |
+| `app.auto_migrate` | Migrations automatiques au chargement des pages (voir [Migrations](#migrations)). |
 | `security.*` | Longueur minimale du mot de passe, verrouillage, durée de session, HTTPS forcé. |
+| `security.force_https` | Redirige http → https (hors localhost) et envoie HSTS. |
+| `security.trusted_proxies` | IP des reverse-proxies / CDN dont on accepte `X-Forwarded-For`. **À renseigner derrière un proxy**, sinon toutes les visites semblent venir du proxy (limitation de tentatives faussée). |
+| `security.csp` | `enforce` (défaut), `report-only` ou `off` : politique de sécurité du contenu. |
+| `integrations.*` | Autorise (déconseillé) les webhooks en http ou vers le réseau privé. |
 | `apis.recherche_entreprises` | API de l'État (gratuite, activée par défaut). |
 | `apis.bodacc` | API BODACC (annonces légales, gratuite, activée par défaut). |
 | `apis.pappers.api_token` | Clé Pappers (optionnelle). |
@@ -229,35 +262,49 @@ stockés en base (table `settings`) : ils priment sur `config.php` lorsqu'ils so
 
 ---
 
-## Tâche planifiée (cron)
+## Tâches planifiées (cron)
 
-Le script **`cron/rappels.php`** génère les rappels (notifications internes + e-mail récapitulatif
-si le SMTP est activé). À exécuter une fois par jour.
+Le script **`cron/quotidien.php`** regroupe les traitements quotidiens. À exécuter **une fois par jour** :
+
+| Tâche | Rôle |
+|---|---|
+| `migrations` | applique les migrations de base de données en attente |
+| `blg` | importe les exports déposés par l'ERP BLG (factures impayées, règlements) |
+| `penalites` | recalcule les pénalités de retard des litiges en mode automatique |
+| `rappels` | notifications internes + e-mail récapitulatif aux administrateurs |
+| `bodacc` | surveille les procédures collectives des clients ayant un litige en cours |
+| `rapport` | envoie le rapport hebdomadaire (au jour configuré) |
+| `rgpd` | anonymise / purge selon les durées de conservation |
+| `entretien` | nettoie les compteurs de limitation et les fichiers d'import temporaires |
 
 ```bash
-# Test manuel
-php /var/www/litiges.locavente.fr/cron/rappels.php
+# Test manuel (simulation : n'écrit rien quand c'est possible)
+php /var/www/litiges.locavente.fr/cron/quotidien.php --dry-run
 
-# Simulation (aucune écriture en base)
-php /var/www/litiges.locavente.fr/cron/rappels.php --dry-run
+# Une seule tâche
+php /var/www/litiges.locavente.fr/cron/quotidien.php --only=penalites,rappels
 ```
 
-Exemple de crontab (tous les jours à 7 h) :
+Exemple de crontab :
 
 ```cron
-0 7 * * * /usr/bin/php /var/www/litiges.locavente.fr/cron/rappels.php --quiet
+# Traitements quotidiens à 7 h
+0 7 * * * /usr/bin/php /var/www/litiges.locavente.fr/cron/quotidien.php --quiet
+# Envoi des webhooks en attente / rejeu des échecs (toutes les 5 minutes)
+*/5 * * * * /usr/bin/php /var/www/litiges.locavente.fr/cron/webhooks.php --quiet
 ```
 
-Sur CyberPanel, cette entrée peut être ajoutée via *Cron Jobs*. Utilisez le **chemin absolu**
-de PHP (`/usr/bin/php`) et un **chemin absolu** vers le script.
+Sur CyberPanel, ces entrées s'ajoutent via *Cron Jobs*. Utilisez le **chemin absolu** de PHP (`/usr/bin/php`) et
+un **chemin absolu** vers le script.
 
-Types de rappels générés :
+Autres scripts : `cron/rappels.php` (rappels seuls, ancien point d'entrée toujours valable),
+`cron/rapport.php [--force]` (rapport hebdomadaire immédiat), `cron/migrate.php [--status]`.
 
-- `relance_due` — la date de prochaine relance est atteinte ;
-- `promesse_depassee` — une promesse de paiement n'a pas été honorée ;
-- `echeance_proche` — l'échéance du litige approche (seuil configurable).
+Types de rappels générés : relance à effectuer, promesse non honorée, échéance proche, **échéance de plan de paiement
+impayée**, **tâches en retard**, **délai de déclaration de créance** (J-30, 15, 7, 3, 1 et jour J) et
+**courrier sans accusé de réception** après 10 jours.
 
-Le journal d'exécution est écrit dans `storage/logs/cron-rappels.log`.
+Journaux : `storage/logs/cron-quotidien.log`, `storage/logs/cron-rappels.log`, `storage/logs/app-AAAA-MM.log` (erreurs).
 
 ---
 
@@ -337,6 +384,142 @@ Les codes d'accès en lecture seule (voir ci-dessous) sont indépendants des com
 
 ---
 
+## Recouvrement : paiements, échéancier, pénalités
+
+Depuis la fiche d'un litige, onglet **Paiements & échéancier** :
+
+- **Paiements** : chaque règlement reçu est saisi (date, montant, mode, référence). Le **montant récupéré** du litige
+  est toujours la somme des paiements ; il n'est plus saisi à la main. Les soldes déjà saisis avant cette version ont
+  été repris sous la forme d'un paiement « Reprise du solde ». Quand l'encours tombe à zéro, le responsable est
+  invité à clôturer le litige.
+- **Échéancier** : nombre d'échéances, périodicité (hebdomadaire, tous les 15 jours, mensuelle), premier versement
+  facultatif. Les centimes d'arrondi sont reportés sur la dernière échéance. Les paiements enregistrés *après* la
+  création du plan sont imputés dans l'ordre sur les échéances (payée / partielle / en retard) ; la prochaine
+  relance devient la première échéance impayée, et une alerte est émise en cas d'échéance manquée.
+- **Pénalités de retard** : intérêts simples au taux annuel (paramètre global ou taux propre au litige) sur le capital
+  restant dû, calculés jour par jour (base 365) en tenant compte de la date de chaque paiement, plus l'indemnité
+  forfaitaire de recouvrement (40 € par défaut). Avec le « calcul automatique », le cron met le montant à jour chaque
+  jour et l'historique conserve les variations. Le point de départ est la date d'échéance, à défaut la date de facture,
+  à défaut la date d'ouverture.
+
+> Les taux et indemnités par défaut sont des **valeurs de départ à faire valider** par votre conseil
+> (art. L.441-10 et D.441-5 du Code de commerce).
+
+---
+
+## Courriers et suivi d'envoi
+
+*Administration → Modèles de courriers* : quatre modèles sont fournis (relance amiable, mise en demeure, confirmation
+d'échéancier, déclaration de créance). Ils utilisent des variables `{{client.raison_sociale}}`,
+`{{litige.encours}}`, `{{echeancier.tableau}}`, `{{penalites.detail}}`… (liste complète dans l'éditeur). Le HTML saisi
+est **nettoyé par liste blanche** (aucun script ni gestionnaire d'événement).
+
+> Les modèles fournis sont des **exemples** : faites-les valider par votre conseil avant usage.
+
+Dans l'onglet **Courriers** d'un litige : choisir un modèle, relire le courrier généré, puis l'**imprimer**, le
+télécharger en **Word** ou, si `dompdf/dompdf` est installé (`composer require dompdf/dompdf`), en **PDF**. Chaque
+courrier est numéroté (`COUR-AAAA-NNNN`), archivé dans les documents du litige et consigné dans le suivi.
+
+**Suivi d'envoi et accusé de réception** : mode d'envoi (LRAR papier, LRE, huissier, e-mail, main propre), numéro de
+suivi, date d'envoi, date et statut de l'AR. Pour une mise en demeure, la réception de l'AR fixe la prochaine relance à
+l'expiration du délai accordé ; l'absence d'AR après 10 jours déclenche une alerte.
+
+> L'application **suit** les envois recommandés mais ne les **transmet pas** : aucun prestataire de LRE ou de signature
+> électronique (AR24, Maileva, Yousign…) n'est branché. Un prestataire pourrait l'être via l'API et les webhooks.
+
+---
+
+## Workflow par statut
+
+*Administration → Statuts & finalités → Workflow* (par statut) :
+
+- **Passages autorisés** depuis ce statut (rien de coché = tout est permis, comportement historique) ;
+- **Pré-requis** pour entrer dans le statut : au moins une relance, une mise en demeure (relance ou courrier généré),
+  un courrier envoyé, un accusé de réception reçu, une pièce jointe, un échéancier, un paiement, un gestionnaire affecté.
+
+Les règles s'appliquent partout (fiche, édition, actions groupées, API, imports). Un administrateur peut cocher
+« Forcer » ; le forçage est tracé dans l'audit. Aucune règle n'est configurée par défaut.
+
+---
+
+## Procédures collectives et déclaration de créance
+
+Le cron interroge chaque jour le **BODACC** pour un lot de clients ayant un litige en cours. Si une procédure collective
+apparaît (nouvelle annonce), l'application : met à jour la fiche client, consigne l'événement dans chaque litige ouvert,
+**notifie** les responsables et les administrateurs, et émet le webhook `procedure_collective.detectee`.
+
+La fiche litige affiche alors un bandeau avec le **délai de déclaration de créance** (2 mois après la publication au BODACC
+par défaut — art. R.622-24 du Code de commerce — **à vérifier avec votre conseil**, 4 mois hors métropole), le bouton
+« Générer la déclaration de créance » et « Marquer comme déclarée ». Des rappels sont envoyés à J-30, J-15, J-7, J-3, J-1 et J.
+
+---
+
+## Import de données et ERP BLG
+
+*Menu Import de données* : fichiers **CSV** (séparateur et encodage détectés, y compris Windows-1252), **TXT** ou
+**Excel (.xlsx)**. Trois types : *clients*, *litiges (factures impayées)* et *règlements*. Étapes : dépôt du fichier,
+**correspondance des colonnes** (proposée automatiquement d'après les intitulés), **simulation** sans écriture, import,
+rapport ligne par ligne et historique.
+
+- Les litiges sont rapprochés par (client, n° de facture) pour éviter les doublons ; l'option « mettre à jour » actualise
+  le montant et l'échéance.
+- Les règlements sont rapprochés par n° de facture et enregistrés dans le journal des paiements ; un règlement déjà
+  importé n'est **jamais compté deux fois**.
+
+**ERP BLG (blgCloud)** : aucune API publique de blgCloud n'est documentée ; l'intégration repose donc sur les **exports
+CSV/Excel** de l'ERP :
+
+1. Dans *Paramètres → ERP BLG*, indiquez le **dossier surveillé** et activez la synchronisation.
+2. Déposez-y les exports (export planifié, copie, SFTP ou dossier partagé). Le nom du fichier détermine son type :
+   `*client*`, `*facture*`/`*impaye*`/`*echeance*`, `*reglement*`/`*paiement*`/`*encaissement*`.
+3. À la première utilisation, ouvrez le fichier dans *Import de données*, ajustez la correspondance des colonnes puis
+   cliquez sur **Enregistrer comme profil BLG** : le cron quotidien appliquera ce profil. Les fichiers traités sont
+   archivés dans `archive/` ; un même fichier n'est jamais importé deux fois.
+
+Si BLG fournit une API, le point d'extension est `App\Services\Import\BlgService` (le moteur d'import reste le même).
+
+---
+
+## Rapports et prévisions
+
+*Menu Rapports & prévisions* : **balance âgée** (non échu, 0-30, 31-60, 61-90, +90 jours) par agence et par client avec
+export CSV/Excel, **ancienneté moyenne pondérée** des encours, **recouvrement par agence et par mois** (mis en
+recouvrement vs encaissé), **prévisions d'encaissement** sur 8 semaines (échéances de plans de paiement + promesses). Le
+tableau de bord affiche les tâches du jour, les encaissements attendus et les délais de créance urgents.
+
+Un **rapport hebdomadaire** (synthèse + classeur Excel des litiges ouverts) peut être envoyé par e-mail
+(*Paramètres → Rapport hebdomadaire*, SMTP requis).
+
+> Le DSO au sens strict nécessite le chiffre d'affaires facturé, que l'application ne détient pas : il n'est pas calculé.
+
+---
+
+## Tâches, filtres enregistrés, actions groupées
+
+- **Tâches** (menu *Tâches* et onglet de chaque litige) : titre, responsable, échéance, priorité ; notification à
+  l'assignation, rappel quotidien en cas de retard.
+- **Filtres enregistrés** sur la liste des litiges (personnels ou partagés avec l'équipe) ; **tri sur deux critères**.
+- **Actions groupées** : cocher des litiges puis changer le gestionnaire, la priorité ou le statut (le workflow s'applique).
+- **Exports** de la liste : CSV, Excel, PDF/impression (tous les résultats filtrés, pas seulement la page affichée).
+- **Mentions** : `@identifiant` dans une note de litige ou de client notifie la personne citée.
+- **Doublons** : à la création, un avertissement apparaît si le client a déjà un litige avec la même facture (ou le même
+  contrat et le même montant) ; il faut cocher « Créer quand même ».
+
+---
+
+## API REST, webhooks et agenda iCal
+
+- **API REST** (`/api/v1`) avec **jetons** créés dans *Administration → API & webhooks* : lecture et création de
+  litiges, paiements (idempotents), relances, changement de statut. Documentation : [docs/api.md](docs/api.md).
+- **Webhooks** signés (HMAC-SHA256) sur les événements : litige créé / modifié / changement de statut / clôturé,
+  paiement, relance, échéance manquée, procédure collective. Réessais espacés, désactivation après 20 échecs, adresses du
+  réseau interne refusées. Cron : `cron/webhooks.php`.
+- **Agenda iCal** : *Mon profil → Agenda* fournit une adresse privée à ajouter dans Outlook, Google Agenda ou Apple
+  Calendrier (relances, échéances, paiements attendus, promesses, tâches). La synchronisation se fait par abonnement
+  (lecture seule, rafraîchie par le logiciel d'agenda).
+
+---
+
 ## Messagerie interne
 
 Le menu **Messagerie** permet trois types de conversations :
@@ -404,6 +587,18 @@ lecture seule** de la forme `https://votre-domaine/p/<jeton>`. Ce lien, transmis
 (avocat, assureur, confrère…), n'exige **aucun compte** et ne permet aucune modification. Le
 jeton peut être révoqué en supprimant le partage associé.
 
+### Sécuriser un partage
+
+Depuis *Accès lecture seule* (colonne « Sécurité / journal ») :
+
+- **Expiration automatique** : par défaut 30 jours (*Paramètres → Sécurité avancée*), « sans expiration » restant
+  possible à la création ; prolongation possible.
+- **Mot de passe facultatif** (8 caractères minimum), demandé après le code ou le lien.
+- **Documents choisis un par un** : le partage n'affiche que les pièces que vous avez marquées « Rendre public » sur
+  la fiche du litige, et seulement si l'option « Afficher les documents » est cochée pour ce partage.
+- **Journal des consultations** : accès par code/lien, litiges consultés, documents téléchargés, adresse IP, échecs de
+  mot de passe. Trop d'échecs bloquent l'adresse IP quelques minutes.
+
 ---
 
 ## Notifications
@@ -427,15 +622,42 @@ Chaque notification renvoie vers l'élément concerné (client, litige, conversa
 ## Sécurité
 
 - Mots de passe hashés en **bcrypt** ; longueur minimale configurable (10 par défaut).
+- **Double authentification (TOTP)** compatible Google/Microsoft Authenticator, Authy, 1Password : secret chiffré en base
+  (AES-256-GCM), protection contre le rejeu, **8 codes de secours** à usage unique, réinitialisation par un administrateur.
+  Politique réglable : facultative, obligatoire pour les administrateurs ou pour tous (*Paramètres → Sécurité avancée*).
+  Le secret s'enrôle en le saisissant (ou via le lien `otpauth://` sur mobile) : aucun QR code n'est généré.
+- **Limitation de tentatives** (table `rate_limits`) sur la connexion, le code 2FA, la réinitialisation de mot de passe,
+  les codes et liens de partage public, l'API et le flux iCal. L'adresse IP n'est lue dans `X-Forwarded-For` que depuis
+  un proxy déclaré dans `security.trusted_proxies`.
 - **Verrouillage temporaire** du compte après plusieurs échecs de connexion.
-- Jetons **CSRF** sur tous les formulaires POST (vérification globale).
+- La réinitialisation de mot de passe **n'affiche plus jamais le lien** à l'écran (il n'est envoyé que par e-mail) ;
+  sans SMTP, un administrateur réinitialise le mot de passe depuis l'administration.
+- Jetons **CSRF** sur tous les formulaires POST (sauf l'API, authentifiée par jeton Bearer).
 - Requêtes SQL **préparées** partout (PDO), échappement HTML systématique (`e()`).
+- **En-têtes de sécurité** : Content-Security-Policy avec *nonce* (aucun script inline non signé), HSTS, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`. Si une page s'affiche mal après la mise à jour, passez `security.csp` à
+  `report-only` le temps de corriger.
 - **Sessions** régénérées à la connexion, expiration par inactivité, cookies `HttpOnly` + `SameSite`.
-- **Changement de mot de passe forcé** à la première connexion si demandé.
-- Pièces jointes **hors racine web** (`storage/uploads`) et `.htaccess` de protection.
-- **Journal d'audit** complet des actions sensibles.
-- Recommandé : servir le site en **HTTPS** (`security.force_https = true`), supprimer
-  `public/install.php` et restreindre l'accès à `config/` et `storage/`.
+- **Pièces jointes** : extension autorisée, taille, **type réel du contenu (finfo) cohérent avec l'extension**, jamais
+  d'extension exécutable, stockage **hors racine web**, téléchargement en pièce jointe, **droits du module** du litige ou
+  du client vérifiés, antivirus **ClamAV** facultatif (*Paramètres → Sécurité avancée*).
+- **Webhooks** : adresses internes refusées (anti-SSRF), connexion épinglée sur l'IP validée, aucune redirection suivie.
+- **Exports** CSV/Excel : neutralisation des formules (`=`, `+`, `-`, `@`).
+- **Journal d'audit** complet des actions sensibles et **journal d'erreurs** (`storage/logs/app-AAAA-MM.log`).
+- Recommandé : servir le site en **HTTPS**, supprimer `public/install.php`, restreindre l'accès à `config/` et
+  `storage/`, et désactiver les migrations automatiques en production (`app.auto_migrate = false`).
+
+---
+
+## RGPD
+
+*Administration → RGPD* : **registre des traitements** pré-rempli (modifiable), **durées de conservation**
+(anonymisation des contacts et, en option, suppression des litiges clos au-delà de N mois, purge du journal d'audit) avec
+simulation avant exécution, exécutée aussi par le cron. Sur la fiche client, chaque contact dispose d'un **export RGPD**
+(JSON) et d'un bouton **Anonymiser** (droit à l'effacement).
+
+> Les durées proposées (ex. 60 mois) et les bases légales du registre sont des **points de départ** à valider avec votre
+> délégué à la protection des données ou votre conseil.
 
 ---
 
@@ -443,13 +665,18 @@ Chaque notification renvoie vers l'élément concerné (client, litige, conversa
 
 ```
 app/
-├── bootstrap.php            # Amorçage (autoload, config, base, session, migrations)
-├── helpers.php              # Fonctions utilitaires (e(), url(), money()…)
-├── Controllers/             # Contrôleurs (une classe par domaine)
-├── Core/                    # Noyau : Router, Database, Auth, Csrf, View, Migrator…
+├── bootstrap.php            # Amorçage (autoload, config, en-têtes, base, session, migrations)
+├── helpers.php              # Fonctions utilitaires (e(), url(), money(), csp_nonce()…)
+├── Controllers/             # Contrôleurs HTTP, minces (une classe par domaine)
+├── Core/                    # Noyau : Router, Database, Auth, Totp, Crypto, RateLimiter, SecurityHeaders, Migrator…
+├── Enums/                   # Types de litige, priorités, rôles, types d'action, modes de paiement
+├── Exceptions/              # Erreurs métier (validation, doublon, workflow)
 ├── Models/                  # Modèles (accès base de données)
-├── Services/                # APIs entreprises, IA, uploads, emails, rappels, export
-│   └── Api/                 # Clients API Recherche d'entreprises / BODACC / Pappers / 1min.ai
+├── Services/                # Règles métier : LitigeService, PaiementService, EcheanceService, PenaltyService,
+│   │                        #   CourrierService, WorkflowService, WebhookService, ReportService, IcalService…
+│   ├── Api/                 # Clients API Recherche d'entreprises / BODACC / Pappers / 1min.ai
+│   ├── Calcul/              # Calculs purs et testés : pénalités, échéancier, balance âgée
+│   └── Import/              # Import CSV/Excel et synchronisation BLG
 ├── Resources/referentiels/  # Libellés officiels (NAF, catégories juridiques, sections)
 └── Views/                   # Gabarits PHP (layouts, pages, partials)
 
@@ -458,19 +685,41 @@ config/
 └── config.php               # Configuration réelle (généré, non versionné)
 
 cron/
-└── rappels.php              # Tâche planifiée (rappels automatiques)
+├── quotidien.php            # Traitements quotidiens (rappels, pénalités, BODACC, BLG, RGPD…)
+├── webhooks.php             # Envoi / rejeu des webhooks
+├── rapport.php              # Rapport hebdomadaire
+├── migrate.php              # Migrations en ligne de commande
+└── rappels.php              # Rappels seuls (ancien point d'entrée)
 
 database/
-├── schema.sql               # Schéma MySQL + données de référence (installation neuve)
-└── migrations/              # Scripts SQL appliqués automatiquement au chargement des pages
+├── schema.sql               # Schéma de base (l'installeur applique ensuite les migrations)
+└── migrations/              # Évolutions .sql et .php, idempotentes
+
+docs/api.md                  # Documentation de l'API REST et des webhooks
+tests/                       # Tests unitaires PHPUnit
 
 public/                      # ← RACINE WEB
 ├── index.php                # Front controller (routes)
 ├── install.php              # Installeur (à supprimer après installation)
 └── assets/                  # CSS / JS
 
-storage/                     # Données non publiques (uploads, logs)
+storage/                     # Données non publiques (uploads, logs, imports)
 ```
+
+---
+
+## Tests et intégration continue
+
+```bash
+composer install
+vendor/bin/phpunit            # tests unitaires (aucune base de données requise)
+vendor/bin/phpstan analyse    # analyse statique
+```
+
+Les tests couvrent les calculs (pénalités, échéancier, balance âgée), la 2FA (vecteurs RFC 6238), l'analyse des imports,
+le nettoyage HTML, le chiffrement, la détection d'adresses privées (SSRF), la cohérence extension / contenu des fichiers,
+la résolution d'IP derrière un proxy, l'iCal et les exports Excel. La CI GitHub Actions (`.github/workflows/ci.yml`)
+vérifie la syntaxe et lance les tests sur PHP 8.1, 8.2 et 8.3 ; PHPStan y est informatif (niveau 1).
 
 ---
 
@@ -505,7 +754,16 @@ Après une mise à jour du code, pensez à vider le cache de l'OPcache si vous l
 | « L'analyse IA a échoué » | Cliquez sur **Tester la connexion** dans *Paramètres → Intelligence artificielle* : le message exact (clé invalide, modèle inconnu, quota, réseau) s'affiche. Détails : `storage/logs/ia.log` et le journal d'audit. |
 | Erreur IA « HTTP 400 » sur un modèle récent | Modèle de raisonnement (GPT‑5/6, o3, DeepSeek, GLM) : la limite de jetons est élargie automatiquement ; vérifiez surtout que l'identifiant du modèle est exact. |
 | URL d'assets incorrecte | Ajustez `app.url` (sans slash final) dans `config.php`. |
+| Bannière « migrations en attente » | `app.auto_migrate` est à `false` : lancez `php cron/migrate.php` après la mise à jour. |
+| Une page s'affiche mal / un bouton ne répond plus après la mise à jour | Probable blocage par la politique CSP : ouvrez la console du navigateur, puis mettez `security.csp` à `report-only` en attendant correction. |
+| Boucle de redirection http ↔ https | Votre proxy / CDN ne transmet pas `X-Forwarded-Proto` : passez `security.force_https` à `false` et laissez le proxy faire la redirection. |
+| Tout le monde est bloqué en même temps (« Trop de tentatives ») | Derrière un proxy, déclarez son IP dans `security.trusted_proxies` pour que la vraie IP du visiteur soit utilisée. |
+| Impossible de se connecter après avoir perdu son téléphone (2FA) | Utilisez un code de secours, ou demandez à un administrateur *Utilisateurs → Réinit. 2FA*. |
+| Export Excel ou import `.xlsx` indisponible | Activez l'extension PHP `zip`. |
+| Le PDF d'un courrier n'est pas proposé | `composer require dompdf/dompdf` ; sinon utilisez la version imprimable puis « Enregistrer au format PDF ». |
+| Les webhooks restent « en attente » | Planifiez `cron/webhooks.php` (toutes les 5 minutes) et vérifiez que l'URL est publique et en https. |
+| L'API répond 401 avec un jeton valide | Le serveur supprime l'en-tête `Authorization` : la règle de `public/.htaccess` le rétablit sous Apache ; sous Nginx, ajoutez `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`. |
 
 ---
 
-© Locavente — Gestion des litiges. Version 1.0.
+© Locavente — Gestion des litiges. Version 1.1.

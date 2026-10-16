@@ -106,6 +106,11 @@ $entreprise = [
                             </td>
                             <td class="actions">
                     <?php if ($peutEcrire): ?>
+                        <a href="<?= url('/clients/' . (int) $client['id'] . '/contacts/' . (int) $c['id'] . '/export') ?>" class="btn-lien" title="Export RGPD des données de ce contact">Export RGPD</a>
+                        <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/contacts/' . (int) $c['id'] . '/anonymiser') ?>" class="inline" data-confirmer="Anonymiser définitivement ce contact (droit à l'effacement) ?">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn-lien rouge">Anonymiser</button>
+                        </form>
                         <form method="post" action="<?= url('/clients/' . (int) $client['id'] . '/contacts/' . (int) $c['id'] . '/supprimer') ?>" class="inline" data-confirmer="Supprimer ce contact ?">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn-lien rouge">Suppr.</button>

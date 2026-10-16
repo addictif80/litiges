@@ -4,11 +4,21 @@
     "type": "project",
     "license": "proprietary",
     "require": {
-        "php": ">=8.0",
+        "php": ">=8.1",
         "ext-pdo": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
+        "ext-openssl": "*",
         "phpmailer/phpmailer": "^6.9"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.11"
+    },
+    "suggest": {
+        "dompdf/dompdf": "Genere de vrais fichiers PDF (courriers, exports) ; sans lui, une page imprimable est proposee",
+        "ext-zip": "Exports et imports Excel (.xlsx)",
+        "ext-curl": "Appels sortants (API entreprises, webhooks)"
     },
     "config": {
         "optimize-autoloader": true,
@@ -21,5 +31,15 @@
         "files": [
             "app/helpers.php"
         ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse --memory-limit=512M",
+        "lint": "find app public cron database -name '*.php' -print0 | xargs -0 -n1 php -l"
     }
 }

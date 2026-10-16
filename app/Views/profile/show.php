@@ -68,3 +68,41 @@ if (!empty($user['agence_id'])) {
     </div>
 
 </div>
+
+<div class="grille grille-2">
+    <div class="card">
+        <div class="card-entete"><h3>🔐 Double authentification</h3></div>
+        <div class="card-corps">
+            <?php if ((int) ($user['totp_enabled'] ?? 0) === 1): ?>
+                <p><span class="badge" style="background:#198754">Activée</span> Un code à usage unique est demandé à chaque connexion.</p>
+            <?php else: ?>
+                <p><span class="badge" style="background:#6c757d">Désactivée</span> Protégez votre compte avec une application d'authentification (Google Authenticator, Microsoft Authenticator…).</p>
+            <?php endif; ?>
+            <a href="<?= url('/profil/2fa') ?>" class="btn btn-secondaire"><?= (int) ($user['totp_enabled'] ?? 0) === 1 ? 'Gérer' : 'Activer' ?></a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>📅 Agenda (Outlook, Google, Apple…)</h3></div>
+        <div class="card-corps">
+            <?php if (!empty($user['ical_token'])): ?>
+                <p class="petit">Abonnez votre agenda à cette adresse privée : vos relances, échéances, paiements attendus et tâches s'y affichent et se mettent à jour automatiquement.</p>
+                <input type="text" readonly value="<?= e(url('/agenda.ics?token=' . $user['ical_token'])) ?>" data-selectionner style="font-family:monospace;font-size:12px">
+                <p class="aide">Ne partagez pas cette adresse : elle donne accès à votre agenda sans mot de passe.</p>
+                <div class="flex">
+                    <form method="post" action="<?= url('/profil/agenda') ?>" data-confirmer="Générer une nouvelle adresse ? L'ancienne cessera de fonctionner.">
+                        <?= csrf_field() ?><button type="submit" class="btn btn-petit btn-secondaire">Régénérer l'adresse</button>
+                    </form>
+                    <form method="post" action="<?= url('/profil/agenda/supprimer') ?>">
+                        <?= csrf_field() ?><button type="submit" class="btn btn-petit btn-rouge">Désactiver</button>
+                    </form>
+                </div>
+            <?php else: ?>
+                <p class="petit">Obtenez une adresse d'abonnement (iCal) pour retrouver vos échéances de recouvrement dans votre agenda habituel.</p>
+                <form method="post" action="<?= url('/profil/agenda') ?>">
+                    <?= csrf_field() ?><button type="submit" class="btn btn-secondaire">Activer mon agenda</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>

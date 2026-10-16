@@ -184,7 +184,7 @@ foreach ($evolution as $e) { $maxEvo = max($maxEvo, (int) $e['nb']); }
                     <?php foreach ($relancesRecentes as $r): ?>
                         <div class="timeline-item">
                             <div class="tl-entete">
-                                <span class="tl-titre"><?= e(\App\Models\Relance::TYPES[$r['type_action']] ?? $r['type_action']) ?></span>
+                                <span class="tl-titre"><?= e(\App\Enums\TypeAction::tryFrom($r['type_action'])?->label() ?? $r['type_action']) ?></span>
                                 <span class="tl-date"><?= datetime_fr($r['date_action']) ?></span>
                             </div>
                             <div class="tl-corps petit">
@@ -196,6 +196,55 @@ foreach ($evolution as $e) { $maxEvo = max($maxEvo, (int) $e['nb']); }
                         </div>
                     <?php endforeach; ?>
                 </div>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if (!empty($creancesUrgentes)): ?>
+<div class="alerte alerte-warning mb-2">
+    <strong>⚠ Délais de déclaration de créance à surveiller</strong>
+    <?php foreach ($creancesUrgentes as $c): ?>
+        <div class="petit">
+            <a href="<?= url('/litiges/' . (int) $c['id']) ?>"><?= e($c['reference']) ?></a> — <?= e($c['raison_sociale']) ?>
+            (<?= e($c['procedure_collective']) ?>) : avant le <strong><?= date_fr($c['limite']) ?></strong>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<div class="grille grille-2">
+    <div class="card">
+        <div class="card-entete"><h3>✅ Mes tâches</h3><div class="esp"></div><a href="<?= url('/taches') ?>" class="petit">Tout voir</a></div>
+        <?php if (empty($mesTaches)): ?>
+            <div class="card-corps texte-doux">Aucune tâche en cours. 👌</div>
+        <?php else: ?>
+            <table class="tableau tableau-compact">
+                <tbody>
+                <?php foreach ($mesTaches as $t): ?>
+                    <?php $retard = $t['echeance'] && $t['echeance'] < date('Y-m-d'); ?>
+                    <tr>
+                        <td><?= e($t['titre']) ?>
+                            <?php if ($t['litige_id']): ?><div class="petit"><a href="<?= url('/litiges/' . (int) $t['litige_id'] . '#taches') ?>"><?= e($t['litige_reference']) ?></a></div><?php endif; ?></td>
+                        <td class="num petit <?= $retard ? 'texte-rouge gras' : 'texte-doux' ?>"><?= $t['echeance'] ? date_fr($t['echeance']) : '—' ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+
+    <div class="card">
+        <div class="card-entete"><h3>💶 Encaissements attendus (4 semaines)</h3><div class="esp"></div><a href="<?= url('/rapports') ?>" class="petit">Rapports</a></div>
+        <?php if ($previsions === null): ?>
+            <div class="card-corps texte-doux">Indisponible.</div>
+        <?php else: ?>
+            <div class="card-corps">
+                <div class="flex" style="justify-content:space-between"><span>Échéances de plans de paiement</span><strong><?= money($previsions['total_echeances']) ?></strong></div>
+                <div class="flex" style="justify-content:space-between"><span>Promesses de paiement</span><strong><?= money($previsions['total_promesses']) ?></strong></div>
+                <?php if ($previsions['en_retard'] > 0): ?>
+                    <div class="flex texte-rouge" style="justify-content:space-between"><span>Échéances déjà en retard</span><strong><?= money($previsions['en_retard']) ?></strong></div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>

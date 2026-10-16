@@ -14,6 +14,7 @@ class User extends Model
         'username', 'email', 'password_hash', 'full_name', 'role',
         'agence_id', 'actif', 'must_change_password', 'failed_attempts',
         'locked_until', 'last_login_at', 'reset_token', 'reset_expires',
+        'totp_secret', 'totp_enabled', 'totp_recovery', 'totp_last_step', 'ical_token',
     ];
 
     public function findByLogin(string $login): ?array

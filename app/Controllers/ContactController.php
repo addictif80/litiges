@@ -7,6 +7,7 @@ use App\Core\Audit;
 use App\Core\Validator;
 use App\Models\Client;
 use App\Models\Contact;
+use App\Services\RgpdService;
 
 class ContactController extends Controller
 {
@@ -31,7 +32,7 @@ class ContactController extends Controller
         $contactId = $contacts->create($data);
 
         Audit::log('contact_creation', 'contact', $contactId, ['client_id' => $id]);
-        flash('success', 'Contact ajoute.');
+        flash('success', 'Contact ajouté.');
         $this->redirect('/clients/' . $id . '#contacts');
     }
 
@@ -55,7 +56,7 @@ class ContactController extends Controller
         $contacts->update((int) $contactId, $data);
 
         Audit::log('contact_modification', 'contact', (int) $contactId);
-        flash('success', 'Contact mis a jour.');
+        flash('success', 'Contact mis à jour.');
         $this->redirect('/clients/' . $clientId . '#contacts');
     }
 
@@ -68,13 +69,46 @@ class ContactController extends Controller
         }
 
         if ((int) $contact['principal'] === 1) {
-            flash('error', 'Definissez un autre contact principal avant de supprimer celui-ci.');
+            flash('error', 'Définissez un autre contact principal avant de supprimer celui-ci.');
             $this->redirect('/clients/' . $clientId . '#contacts');
         }
 
         $contacts->delete((int) $contactId);
         Audit::log('contact_suppression', 'contact', (int) $contactId);
-        flash('success', 'Contact supprime.');
+        flash('success', 'Contact supprimé.');
+        $this->redirect('/clients/' . $clientId . '#contacts');
+    }
+
+    /** RGPD : export JSON de toutes les donnees detenues sur un contact. */
+    public function exporter(string $clientId, string $contactId): void
+    {
+        $contact = (new Contact())->find((int) $contactId);
+        if (!$contact || (int) $contact['client_id'] !== (int) $clientId) {
+            $this->notFound('Contact introuvable.');
+        }
+
+        $donnees = (new RgpdService())->exporterContact((int) $contactId);
+        Audit::log('rgpd_contact_export', 'contact', (int) $contactId);
+
+        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Disposition: attachment; filename="contact_' . (int) $contactId . '_donnees.json"');
+        echo json_encode($donnees, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        exit;
+    }
+
+    /** RGPD : droit a l'effacement (anonymisation, la trace du dossier est conservee). */
+    public function anonymiser(string $clientId, string $contactId): void
+    {
+        $contact = (new Contact())->find((int) $contactId);
+        if (!$contact || (int) $contact['client_id'] !== (int) $clientId) {
+            $this->notFound('Contact introuvable.');
+        }
+
+        if ((new RgpdService())->anonymiserContact((int) $contactId, \App\Core\Auth::id())) {
+            flash('success', 'Contact anonymisé.');
+        } else {
+            flash('warning', 'Ce contact est déjà anonymisé.');
+        }
         $this->redirect('/clients/' . $clientId . '#contacts');
     }
 
